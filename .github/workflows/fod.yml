@@ -133,8 +133,7 @@ jobs:
           # SETUP_ACTION: https://scm.my.org/shared-repos/fcli-actions/setup.yaml
           # SETUP_EXTRA_OPTS: --copy-from "${{ github.repository }}:${{ github.event.repository.default_branch }}"
           SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}{1}:{2}" --sdlc-status Development --app-owner {3} --assessment-type "{4}"', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, vars.FORTIFY_PARENT_APPVER_NAME, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
-          # SC_CLIENT_VERSION: 24.2
-          SC_CLIENT_VERSION: 23.1
+          SC_CLIENT_VERSION: 24.4.1
           DO_PACKAGE_DEBUG: true
           PACKAGE_EXTRA_OPTS: -bt gradle -bf build.gradle -bc "clean build -x test"
           # FOD_SAST_SCAN_EXTRA_OPTS:
