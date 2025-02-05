@@ -46,14 +46,14 @@ on:
         description: 'Carry out OSS scan using Fortify on Demand'
         required: false
         default: 'true'  
-      runFoDDASTScan:
-        description: 'Carry out DAST scan using Fortify on Demand'
-        required: false
-        default: 'false'
       deployApp:
         description: 'Deploy App'
         required: false
-        default: 'true'        
+        default: 'true'   
+      runFoDDASTScan:
+        description: 'Carry out DAST scan using Fortify on Demand'
+        required: false
+        default: 'false'     
 
 # Global environment variables
 env:
@@ -134,9 +134,9 @@ jobs:
           # SETUP_EXTRA_OPTS: --copy-from "${{ github.repository }}:${{ github.event.repository.default_branch }}"
           SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}{1}:{2}" --sdlc-status Development --app-owner {3} --assessment-type "{4}"', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, vars.FORTIFY_PARENT_APPVER_NAME, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
           # SC_CLIENT_VERSION: 24.2
-          SC_CLIENT_VERSION: 23.1
-          # DO_PACKAGE_DEBUG: true
-          PACKAGE_EXTRA_OPTS: -bt gradle
+          SC_CLIENT_VERSION: 23.2
+          DO_PACKAGE_DEBUG: true
+          PACKAGE_EXTRA_OPTS: -bt gradle -bf build.gradle -bc "clean build -x test"
           # FOD_SAST_SCAN_EXTRA_OPTS:
           DO_WAIT: true
           # DO_POLICY_CHECK: true
@@ -171,9 +171,9 @@ jobs:
         run: |
           fcli --version
           fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --session github-actions
-          rm -f package.zip
+          rm -f $PACKAGE_FILE
           debricked resolve
-          zip package gradle.debricked.lock debricked-config.yaml     
+          zip $PACKAGE_FILE gradle.debricked.lock debricked-config.yaml     
           fcli fod oss-scan start --release "${FOD_RELEASE}" -f $PACKAGE_FILE --store curScan --session github-actions
           sleep 10
           echo "fod_scan_id=$(fcli util var contents curScan -o 'expr={scanId}')" >> $GITHUB_OUTPUT
@@ -189,7 +189,7 @@ jobs:
   Deploy-App:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.deployApp == 'true') }}
-    needs: [ Build-And-Unit-Test, FoD-SAST-Scan ]
+    needs: [ Build-And-Unit-Test, FoD-SAST-Scan, FoD-OSS-Scan ]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
