@@ -212,7 +212,7 @@ jobs:
 
   FoD-DAST-Scan:
     runs-on: ubuntu-latest
-    if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runFoDDASTScan == 'true') }}
+    if: ${{ (github.ref_name == github.event.repository.default_branch) && (github.event.inputs.runFoDDASTScan == 'true') }}
     needs: [ Deploy-App ]
     steps:
       - name: Checkout
@@ -233,10 +233,10 @@ jobs:
           fod_api_url: ${{ vars.FOD_API_URL }}
           fod_client_id: ${{ secrets.FOD_CLIENT_ID }}
           fod_client_secret: ${{ secrets.FOD_CLIENT_SECRET }}
-          fod_app_name: ${{ steps.fortify-app-and-rel-name.outputs.app_name }}
-          fod_release_name: ${{ steps.fortify-app-and-rel-name.outputs.release_name }}
+          fod_app_name: ${{ format('{0}{1}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX) }}
+          fod_release_name: ${{ github.ref_name }}
           #fod_release_name: ${{ format('{0}#{1}', steps.fortify-app-and-rel-name.outputs.release_name, github.run_number) }}
-          fod_parent_release_name: ${{ steps.fortify-app-and-rel-name.outputs.parent_release_name }}
+          #fod_parent_release_name: ${{ steps.fortify-app-and-rel-name.outputs.parent_release_name }}
 
   Security-Gate:
     runs-on: ubuntu-latest
