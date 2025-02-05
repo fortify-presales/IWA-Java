@@ -1,8 +1,11 @@
 
 # Create GitHub Action Repository Variables for your version of the application:
-#   FOD_BASE_URL should be FoD BASE URL for your tenant (e.g. https://ams.fortify.com)
-#   FOD_API_URL should be FoD API URL for your tenant (e.g. https://api.ams,fortify.com)
-#   FOD_PARENT_RELEASE_NAME is the FoD release name corresponding to the parent branch of any newly created branch, this is typically "main" or "develop"
+#   FOD_BASE_URL                - FoD BASE URL for your tenant (e.g. https://ams.fortify.com)
+#   FOD_API_URL                 - FoD API URL for your tenant (e.g. https://api.ams,fortify.com)
+#   FORTIFY_APP_NAME_POSTFIX    - A postfix string to apply to the application to make it unique, set to empty to use DEFAULT_APP_NAME
+#   FOD_PARENT_RELEASE_NAME     - FoD release name corresponding to the parent branch of any newly created branch, this is typically "main" or "develop"
+#   FOD_DEFAULT_OWNER           - The user id of the Application Owner (only needed if an application does not already exist)
+#   FOD_DEFAULT_ASSESSMENT_TYPE - The default Assessment Type to use, e.g. "Static Assessment"
 # Create GitHub Action Secrets for your version of the application:
 #   FOD_CLIENT_ID should be an API Key obtained from your FoD tenant.
 #   FOD_CLIENT_SECRET should be the secret for the API Key obtained for your FoD tenant.
@@ -10,7 +13,6 @@
 #   API Key credentials can be obtained from your FoD tenant, under Administration -> Settings -> API
 #   It is recommended to create credentials with 'Security Lead' Role selected.
 #   "Automated Audit preference" should be configured for the release's Static Scan Settings.
-
 name: DevSecOps with Fortify on Demand
 
 on:
@@ -25,6 +27,9 @@ on:
       - 'tests/**'
       - '*.md'
       - 'LICENSE'
+    #branches-ignore:
+    #  - main
+    #  - develop
     branches:
       - '**'        # matches every branch
   pull_request:
@@ -37,6 +42,10 @@ on:
         description: 'Carry out SAST scan using Fortify on Demand'
         required: false
         default: 'true'
+      runFoDOSSScan:
+        description: 'Carry out OSS scan using Fortify on Demand'
+        required: false
+        default: 'true'  
       runFoDDASTScan:
         description: 'Carry out DAST scan using Fortify on Demand'
         required: false
@@ -113,51 +122,44 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       #
-      # Set FoD App and Release names for use in rest of workflow
-      #
-      - name: Fortify App and Release Name
-        id: fortify-app-and-rel-name
-        uses: fortify-presales/github-actions/fortify-app-and-release-name@main
-        with:
-          default_fortify_app_name: ${{ env.DEFAULT_APP_NAME }}
-          default_fortify_release_name: ${{ github.ref_name }}
-          app_name_postfix: ${{ vars.FORTIFY_APP_NAME_POSTFIX }}
-          #get_fod_release_id: true
-          #fod_api_url: ${{ vars.FOD_API_URL }}
-          #fod_client_id: ${{ secrets.FOD_CLIENT_ID }}
-          #fod_client_secret: ${{ secrets.FOD_CLIENT_SECRET }}
-      # Uncomment below to debug FoD App/Release names   
-      - name: Print App and Release Name
-        shell: bash
-        run: |
-          echo "FoD App Name: ${FOD_APP_NAME}"
-          echo "FoD Release Name: ${FOD_RELEASE_NAME}"
-          echo "FoD Release Id: ${FOD_RELEASE_ID}"
-        env:
-          FOD_APP_NAME: ${{ steps.fortify-app-and-rel-name.outputs.app_name }}
-          FOD_RELEASE_NAME: ${{ steps.fortify-app-and-rel-name.outputs.release_name }}
-          #FOD_RELEASE_ID: ${{ steps.fortify-app-and-rel-name.outputs.release_id }}
-
-      #
       # See: https://github.com/marketplace/actions/fortify-ast-scan
       #
-      - name: Run FoD SAST Scan
-        uses: fortify/github-action/fod-sast-scan@v1
+      - name: Run Fortify on Demand SAST & SCA Scan
+        uses: fortify/github-action@v1
+        with:
+          sast-scan: true
+          debricked-sca-scan: false # we will do this separately using fcli
         env:
           FOD_URL: ${{ vars.FOD_URL }}
-          FOD_CLIENT_ID: ${{ secrets.FOD_CLIENT_ID }}
-          FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
+          #FOD_TENANT: ${{secrets.FOD_TENANT}}
+          #FOD_USER: ${{secrets.FOD_USER}}
+          #FOD_PASSWORD: ${{secrets.FOD_PAT}}
+          FOD_CLIENT_ID: ${{secrets.FOD_CLIENT_ID}}
+          FOD_CLIENT_SECRET: ${{secrets.FOD_CLIENT_SECRET}}
           # FOD_LOGIN_EXTRA_OPTS: --socket-timeout=60s
-          FOD_RELEASE: ${{ format('{0}:{1}', steps.fortify-app-and-rel-name.outputs.app_name, steps.fortify-app-and-rel-name.outputs.release_name) }}
-          #FOD_RELEASE: ${{ steps.fortify-app-and-rel-name.outputs.release_id  }}
-          PACKAGE_EXTRA_OPTS: -oss
+          FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
           DO_SETUP: true
-          SETUP_EXTRA_OPTS: ${{ format('--sdlc-status Development --copy-from {0}', vars.FOD_PARENT_RELEASE_ID) }}
+          # SETUP_ACTION: https://scm.my.org/shared-repos/fcli-actions/setup.yaml
+          # SETUP_EXTRA_OPTS: --copy-from "${{ github.repository }}:${{ github.event.repository.default_branch }}"
+          SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}{1}:{2}" --sdlc-status Development --app-owner {3} --assessment-type "{4}"', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, vars.FORTIFY_PARENT_APPVER_NAME, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
+          # SC_CLIENT_VERSION: 24.2
+          SC_CLIENT_VERSION: 23.1
+          # DO_PACKAGE_DEBUG: true
+          PACKAGE_EXTRA_OPTS: -bt gradle
+          # FOD_SAST_SCAN_EXTRA_OPTS:
           DO_WAIT: true
+          # DO_POLICY_CHECK: true
+          # POLICY_CHECK_ACTION: https://scm.my.org/shared-repos/fcli-actions/check-policy.yaml
+          # POLICY_CHECK_EXTRA_OPTS: --on-unsigned=ignore
           DO_JOB_SUMMARY: true
-          #DO_POLICY_CHECK: true
+          # JOB_SUMMARY_ACTION: https://scm.my.org/shared-repos/fcli-actions/job-summary.yaml
+          # JOB_SUMMARY_EXTRA_OPTS: --on-unsigned=ignore
           DO_PR_COMMENT: true
+          # PR_COMMENT_ACTION: https://scm.my.org/shared-repos/fcli-actions/github-pr-comment.yaml
+          # PR_COMMENT_EXTRA_OPTS: --on-unsigned=ignore
           DO_EXPORT: true
+          # EXPORT_ACTION: https://scm.my.org/shared-repos/fcli-actions/github-sast-report.yaml
+          # EXPORT_EXTRA_OPTS: --on-unsigned=ignore
           # TOOL_DEFINITIONS: https://ftfy.mycompany.com/tool-definitions/v1/tool-definitions.yaml.zip
 
   Deploy-App:
