@@ -158,6 +158,32 @@ tasks.named('wrapper') {
     distributionType = Wrapper.DistributionType.ALL
 }
 
+tasks.withType(Zip).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+task copyToLib(type: Copy) {
+    into "$buildDir/output/lib"
+    from configurations.compileClasspath
+}
+task zip(type: Zip, dependsOn: 'copyToLib') {
+    classifier = 'src'
+    from projectDir
+    include 'src/main/**/*'
+
+    from jar.outputs.files
+
+    from ("$buildDir/output/lib") {
+        include '**/*.jar'
+        into('lib')
+    }
+    from ('.') {
+        include 'Dockerfile.*'
+    }
+
+    println "Path to zip: $archivePath.path"
+}
+
 task writeClasspath() {
     doLast() {
         buildDir.mkdirs()

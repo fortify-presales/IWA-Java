@@ -112,45 +112,71 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
+      # Manually package source and libs
+      - name: Package Source and Libs
+        run: ./gradlew clean build -x test zip
+      - name: Setup Fortify tools
+        uses: fortify/github-action/setup@v1
+        with:
+          #tool-definitions: https://github.com/fortify/tool-definitions/releases/download/v1/tool-definitions.yaml.zip
+          export-path: true
+          fcli: latest
+      - name: Perform FoD SAST Scan
+        shell: bash
+        run: |
+          fcli --version
+          fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --session github-actions
+          ./gradlew clean build -x test zip
+          fcli fod sast-scan start --release "${FOD_RELEASE}" -f $PACKAGE_FILE --store curScan --session github-actions
+          sleep 10
+          echo "fod_scan_id=$(fcli util var contents curScan -o 'expr={scanId}')" >> $GITHUB_OUTPUT
+          fcli fod sast-scan wait-for ::curScan:: --session github-actions
+          fcli fod session logout --session github-actions
+        env:
+          FOD_API_URI: ${{ vars.FOD_API_URL }}
+          FOD_CLIENT_ID: ${{ secrets.FOD_CLIENT_ID }}
+          FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
+          PACKAGE_FILE: "./build/distributions/iwa-1.0-src.zip"
+          FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
       #
       # See: https://github.com/marketplace/actions/fortify-ast-scan
       #
-      - name: Run Fortify on Demand SAST & SCA Scan
-        uses: fortify/github-action@v1
-        with:
-          sast-scan: true
-          debricked-sca-scan: false # we will do this separately using fcli
-        env:
-          FOD_URL: ${{ vars.FOD_URL }}
-          #FOD_TENANT: ${{secrets.FOD_TENANT}}
-          #FOD_USER: ${{secrets.FOD_USER}}
-          #FOD_PASSWORD: ${{secrets.FOD_PAT}}
-          FOD_CLIENT_ID: ${{secrets.FOD_CLIENT_ID}}
-          FOD_CLIENT_SECRET: ${{secrets.FOD_CLIENT_SECRET}}
-          # FOD_LOGIN_EXTRA_OPTS: --socket-timeout=60s
-          FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
-          DO_SETUP: true
-          # SETUP_ACTION: https://scm.my.org/shared-repos/fcli-actions/setup.yaml
-          # SETUP_EXTRA_OPTS: --copy-from "${{ github.repository }}:${{ github.event.repository.default_branch }}"
-          SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}{1}:{2}" --sdlc-status Development --app-owner {3} --assessment-type "{4}"', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, vars.FORTIFY_PARENT_APPVER_NAME, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
-          SC_CLIENT_VERSION: 24.4.1
-          DO_PACKAGE_DEBUG: true
-          PACKAGE_EXTRA_OPTS: -bt gradle -bf build.gradle -bc "clean build -x test"
-          # FOD_SAST_SCAN_EXTRA_OPTS:
-          DO_WAIT: true
-          # DO_POLICY_CHECK: true
-          # POLICY_CHECK_ACTION: https://scm.my.org/shared-repos/fcli-actions/check-policy.yaml
-          # POLICY_CHECK_EXTRA_OPTS: --on-unsigned=ignore
-          DO_JOB_SUMMARY: true
-          # JOB_SUMMARY_ACTION: https://scm.my.org/shared-repos/fcli-actions/job-summary.yaml
-          # JOB_SUMMARY_EXTRA_OPTS: --on-unsigned=ignore
-          DO_PR_COMMENT: true
-          # PR_COMMENT_ACTION: https://scm.my.org/shared-repos/fcli-actions/github-pr-comment.yaml
-          # PR_COMMENT_EXTRA_OPTS: --on-unsigned=ignore
-          DO_EXPORT: true
-          # EXPORT_ACTION: https://scm.my.org/shared-repos/fcli-actions/github-sast-report.yaml
-          # EXPORT_EXTRA_OPTS: --on-unsigned=ignore
-          # TOOL_DEFINITIONS: https://ftfy.mycompany.com/tool-definitions/v1/tool-definitions.yaml.zip
+      #- name: Run Fortify on Demand SAST & SCA Scan
+      #  uses: fortify/github-action@v1
+      #  with:
+      #    sast-scan: true
+      #    debricked-sca-scan: false # we will do this separately using fcli
+      #  env:
+      #    FOD_URL: ${{ vars.FOD_URL }}
+      #    #FOD_TENANT: ${{secrets.FOD_TENANT}}
+      #    #FOD_USER: ${{secrets.FOD_USER}}
+      #    #FOD_PASSWORD: ${{secrets.FOD_PAT}}
+      #    FOD_CLIENT_ID: ${{secrets.FOD_CLIENT_ID}}
+      #    FOD_CLIENT_SECRET: ${{secrets.FOD_CLIENT_SECRET}}
+      #    # FOD_LOGIN_EXTRA_OPTS: --socket-timeout=60s
+      #    FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
+      #    DO_SETUP: true
+      #    # SETUP_ACTION: https://scm.my.org/shared-repos/fcli-actions/setup.yaml
+      #    # SETUP_EXTRA_OPTS: --copy-from "${{ github.repository }}:${{ github.event.repository.default_branch }}"
+      #    SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}{1}:{2}" --sdlc-status Development --app-owner {3} --assessment-type "{4}"', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, vars.FORTIFY_PARENT_APPVER_NAME, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
+      #    #SC_CLIENT_VERSION: 24.4.1
+      #    #DO_PACKAGE_DEBUG: true
+      #    PACKAGE_EXTRA_OPTS: -bt gradle -bf build.gradle -bc "clean build -x test"
+      #    # FOD_SAST_SCAN_EXTRA_OPTS:
+      #    DO_WAIT: true
+      #    # DO_POLICY_CHECK: true
+      #    # POLICY_CHECK_ACTION: https://scm.my.org/shared-repos/fcli-actions/check-policy.yaml
+      #    # POLICY_CHECK_EXTRA_OPTS: --on-unsigned=ignore
+      #    DO_JOB_SUMMARY: true
+      #    # JOB_SUMMARY_ACTION: https://scm.my.org/shared-repos/fcli-actions/job-summary.yaml
+      #    # JOB_SUMMARY_EXTRA_OPTS: --on-unsigned=ignore
+      #    DO_PR_COMMENT: true
+      #    # PR_COMMENT_ACTION: https://scm.my.org/shared-repos/fcli-actions/github-pr-comment.yaml
+      #    # PR_COMMENT_EXTRA_OPTS: --on-unsigned=ignore
+      #    DO_EXPORT: true
+      #    # EXPORT_ACTION: https://scm.my.org/shared-repos/fcli-actions/github-sast-report.yaml
+      #    # EXPORT_EXTRA_OPTS: --on-unsigned=ignore
+      #    # TOOL_DEFINITIONS: https://ftfy.mycompany.com/tool-definitions/v1/tool-definitions.yaml.zip
 
   FoD-OSS-Scan:
     runs-on: ubuntu-latest
