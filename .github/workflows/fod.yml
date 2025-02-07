@@ -190,7 +190,7 @@ jobs:
           #tool-definitions: https://github.com/fortify/tool-definitions/releases/download/v1/tool-definitions.yaml.zip
           export-path: true
           fcli: latest
-          debricked-cli: latest
+          debricked-cli: 2.6.1 # change to latest
       - name: Perform FoD OSS Scan
         shell: bash
         run: |
