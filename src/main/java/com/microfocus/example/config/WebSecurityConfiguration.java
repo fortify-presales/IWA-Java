@@ -42,6 +42,7 @@ import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.firewall.DefaultHttpFirewall;
 import org.springframework.security.web.firewall.HttpFirewall;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
@@ -98,14 +99,14 @@ public class WebSecurityConfiguration extends WebSecurityConfigurerAdapter {
     @Order(1)
     public class ApiConfigurationAdapter extends WebSecurityConfigurerAdapter {
 
-        private JwtAuthenticationConverter jwtAuthenticationConverter() {
+        /*private JwtAuthenticationConverter jwtAuthenticationConverter() {
             JwtGrantedAuthoritiesConverter jwtGrantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
             jwtGrantedAuthoritiesConverter.setAuthoritiesClaimName("scope");
             jwtGrantedAuthoritiesConverter.setAuthorityPrefix("SCOPE_");
             JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
             jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(jwtGrantedAuthoritiesConverter);
             return jwtAuthenticationConverter;
-        }
+        }*/
 
         @Override
         protected void configure(HttpSecurity httpSecurity) throws Exception {
@@ -119,20 +120,26 @@ public class WebSecurityConfiguration extends WebSecurityConfigurerAdapter {
                     .antMatchers(HttpMethod.GET,"/api/v3/products/**").permitAll()
                     .antMatchers(HttpMethod.GET, "/api/v3/reviews").permitAll()
                     .antMatchers(HttpMethod.GET, "/api/v3/reviews/**").permitAll()
-                    .antMatchers(HttpMethod.GET, "/api/**").hasAuthority("SCOPE_read:users")
-                    .antMatchers(HttpMethod.DELETE, "/api/**").hasAuthority("SCOPE_delete:products")
-                    .antMatchers(HttpMethod.POST, "/api/**").hasAuthority("SCOPE_add:products")
-                    .antMatchers(HttpMethod.PUT, "/api/**").hasAuthority("SCOPE_update:products")
-                    .antMatchers(HttpMethod.PATCH, "/api/**").hasAuthority("SCOPE_update:products")
+                    .antMatchers(HttpMethod.GET, "/api/**").authenticated()
+                    .antMatchers(HttpMethod.DELETE, "/api/**").hasAnyRole("ADMIN", "API")
+                    .antMatchers(HttpMethod.POST, "/api/**").hasAnyRole("ADMIN", "API")
+                    .antMatchers(HttpMethod.PUT, "/api/**").hasAnyRole("ADMIN", "API")
+                    .antMatchers(HttpMethod.PATCH, "/api/**").hasAnyRole("ADMIN", "API")
                     .and().exceptionHandling().authenticationEntryPoint(unauthorizedHandler)
                     .and().sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                     //.and().exceptionHandling().authenticationEntryPoint(basicAuthenticationEntryPoint)
                     .and().exceptionHandling().accessDeniedHandler(apiAccessDeniedHandler)
-                    .and().csrf().disable().cors(Customizer.withDefaults())
-                    .oauth2ResourceServer().jwt().jwtAuthenticationConverter(jwtAuthenticationConverter());
+                    .and().csrf().disable().cors(Customizer.withDefaults());
+                    
+                    //.oauth2ResourceServer().jwt().jwtAuthenticationConverter(jwtAuthenticationConverter());
 
-            //httpSecurity.addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);
+                    //.antMatchers(HttpMethod.GET, "/api/**").hasAuthority("SCOPE_read:users")
+                    //.antMatchers(HttpMethod.DELETE, "/api/**").hasAuthority("SCOPE_delete:products")
+                    //.antMatchers(HttpMethod.POST, "/api/**").hasAuthority("SCOPE_add:products")
+                    //.antMatchers(HttpMethod.PUT, "/api/**").hasAuthority("SCOPE_update:products")
+                    //.antMatchers(HttpMethod.PATCH, "/api/**").hasAuthority("SCOPE_update:products")
             
+                    httpSecurity.addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);            
         }
 
     }

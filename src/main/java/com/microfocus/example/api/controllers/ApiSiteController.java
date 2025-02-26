@@ -38,6 +38,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -126,8 +127,8 @@ public class ApiSiteController {
 
     @Operation(summary = "Get the site status", description = "Get the site message of the day", tags = {"site"})
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Success", content = @Content(array = @ArraySchema(schema = @Schema(implementation = SiteStatus.class)))),
-            @ApiResponse(responseCode = "500", description = "Internal Server Error", content = @Content(schema = @Schema(implementation = ApiStatusResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Success", content = { @Content(mediaType = "application/json", schema = @Schema(implementation = SiteStatus.class)) }),
+            @ApiResponse(responseCode = "500", description = "Internal Server Error", content = { @Content(mediaType = "application/json", schema = @Schema(implementation = ApiStatusResponse.class)) }),
     })
     @GetMapping(value = {"/status"}, produces = {"application/json"})
     public ResponseEntity<SiteStatus> getSiteStatus() {
@@ -138,9 +139,9 @@ public class ApiSiteController {
 
     @Operation(summary = "Check if username is taken", description = "Check if a user with the specified username already exists in the site", tags = {"site"})
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Success", content = @Content(schema = @Schema(implementation = User.class))),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ApiStatusResponse.class))),
-            @ApiResponse(responseCode = "500", description = "Internal Server Error", content = @Content(schema = @Schema(implementation = ApiStatusResponse.class))),
+        @ApiResponse(responseCode = "200", description = "Success", content = @Content(schema = @Schema(implementation = Boolean.class))),
+        @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ApiStatusResponse.class))),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error", content = @Content(schema = @Schema(implementation = ApiStatusResponse.class))),
     })
     @GetMapping(value = {"/username-already-exists/{username}"}, produces =  {"application/json"})
     public ResponseEntity<Boolean> usernameIsTaken(
@@ -156,7 +157,7 @@ public class ApiSiteController {
 
     @Operation(summary = "Check if email exists", description = "Check if a user with the specified email address already exists in the site", tags = {"site"})
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Success", content = @Content(schema = @Schema(implementation = User.class))),
+            @ApiResponse(responseCode = "200", description = "Success", content = @Content(schema = @Schema(implementation = Boolean.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ApiStatusResponse.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ApiStatusResponse.class))),
             @ApiResponse(responseCode = "500", description = "Internal Server Error", content = @Content(schema = @Schema(implementation = ApiStatusResponse.class))),
@@ -183,7 +184,22 @@ public class ApiSiteController {
     @PostMapping(value = {"/register-user"}, produces = {"application/json"}, consumes = {"application/json"})
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseEntity<ApiStatusResponse> registerUser(
-            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "") @Valid @RequestBody RegisterUserRequest newUser) {
+        @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            content = @Content(
+                examples = {
+                    @ExampleObject(
+                        name = "Register user request",
+                        summary = "An example request to register a new IWA user.",
+                        value = "{\n" +
+                                    "\"email\":\"user5@localhost.com\",\n" +
+                                    "\"firstName\":\"Test\",\n" +
+                                    "\"lastName\":\"User 5\",\n" +
+                                    "\"password\":\"password\",\n" +
+                                    "\"phone\":\"01203456789\",\n" +
+                                    "\"username\":\"user1@localhost.com\"\n" +
+                                "}"
+                    )
+            })) @Valid @RequestBody RegisterUserRequest newUser) {
         log.debug("API::Registering new user: " + newUser.toString());
         RegisterUserResponse user = userService.registerUser(newUser);
         ApiStatusResponse response = new ApiStatusResponse();
@@ -201,7 +217,20 @@ public class ApiSiteController {
     @PostMapping(value = {"/subscribe-user"}, produces = {"application/json"}, consumes = {"application/json"})
     @ResponseStatus(HttpStatus.OK)
     public ResponseEntity<ApiStatusResponse> subscribeUser(
-            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "") @Valid @RequestBody SubscribeUserRequest newUser) {
+        @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            content = @Content(
+                examples = {
+                    @ExampleObject(
+                        name = "Subscribe user request",
+                        summary = "An example request to subscribe a user to the newsletter.",
+                        value = "{\n" +
+                                    "\"email\":\"user5@localhost.com\",\n" +
+                                    "\"firstName\":\"Test\",\n" +
+                                    "\"lastName\":\"User 5\",\n" +
+                                    "\"id\":\"777c44f6-6e76-4630-abd6-d9b3e4027625\"\n" +
+                                "}"
+                    )
+            })) @Valid @RequestBody SubscribeUserRequest newUser) {
         log.debug("API::Subscribing a user to the newsletter: " + newUser.toString());
         SubscribeUserResponse user = userService.subscribeUser(newUser);
         ApiStatusResponse response = new ApiStatusResponse();
@@ -219,7 +248,18 @@ public class ApiSiteController {
     })
     @PostMapping(value = {"/sign-in"}, produces = {"application/json"}, consumes = {"application/json"})
     @ResponseStatus(HttpStatus.OK)
-    public ResponseEntity<JwtResponse> signIn(@Valid @RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<JwtResponse> signIn(@io.swagger.v3.oas.annotations.parameters.RequestBody(
+        content = @Content(
+            examples = {
+                @ExampleObject(
+                    name = "User login request",
+                    summary = "An example login request for an IWA user.",
+                    value = "{\n" +
+                               "\"username\":\"user1@localhost.com\",\n" +
+                               "\"password\":\"password\"\n" +
+                            "}"
+                )
+        })) @Valid @RequestBody LoginRequest loginRequest) {
 
         Authentication authentication = null;
         try {
@@ -281,7 +321,17 @@ public class ApiSiteController {
     })
     @PostMapping(value = {"/refresh-token"}, produces = {"application/json"}, consumes = {"application/json"})
     @ResponseStatus(HttpStatus.OK)
-    public ResponseEntity<RefreshTokenResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest refreshTokenRequest) {
+    public ResponseEntity<RefreshTokenResponse> refreshToken(@io.swagger.v3.oas.annotations.parameters.RequestBody(
+        content = @Content(
+            examples = {
+                @ExampleObject(
+                    name = "User login request",
+                    summary = "An example login request for an IWA user.",
+                    value = "{\n" +
+                               "\"refreshToken\":\"54825673-b4c3-438d-a382-5db8951210bc\"\n" +
+                            "}"
+                )
+        })) @Valid @RequestBody RefreshTokenRequest refreshTokenRequest) {
 
         String requestRefreshToken = refreshTokenRequest.getRefreshToken();
         try{

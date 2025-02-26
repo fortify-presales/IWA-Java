@@ -5,7 +5,7 @@
 		"description": "An example collection for authenticating against IWA (Insecure Web Application) REST API",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "13859659",
-		"_collection_link": "https://mfdemouk.postman.co/workspace/My-Workspace~c71e9c5c-d86a-44e4-8a78-9b4f1d507064/collection/13859659-eda1e993-4db3-4738-b896-32422f5b16fa?action=share&source=collection_link&creator=13859659"
+		"_collection_link": "https://mfdemouk.postman.co/workspace/c71e9c5c-d86a-44e4-8a78-9b4f1d507064/collection/13859659-eda1e993-4db3-4738-b896-32422f5b16fa?action=share&source=collection_link&creator=13859659"
 	},
 	"item": [
 		{
@@ -25,10 +25,11 @@
 									"    var jsonData = pm.response.json();\r",
 									"    pm.expect(jsonData.accessToken).exist;\r",
 									"    console.log('Saving JWT access token in environment: ' + jsonData.accessToken)\r",
-									"    pm.environment.set('jwt_token', jsonData.accessToken)\r",
+									"    pm.environment.set('access_token', jsonData.accessToken)\r",
 									"});"
 								],
-								"type": "text/javascript"
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],
@@ -37,7 +38,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n  \"username\": \"{{username}}\",\r\n  \"password\": \"{{password}}\"\r\n}",
+							"raw": "{\r\n    \"username\": \"{{username}}\",\r\n    \"password\": \"{{password}}\"\r\n}",
 							"options": {
 								"raw": {
 									"language": "json"

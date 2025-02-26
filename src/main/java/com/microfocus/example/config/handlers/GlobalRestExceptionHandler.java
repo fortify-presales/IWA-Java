@@ -25,6 +25,8 @@ import com.microfocus.example.payload.response.ApiStatusResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -38,6 +40,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -54,7 +57,7 @@ import java.util.Arrays;
 import java.util.List;
 
 @RestControllerAdvice
-//@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(value = Ordered.HIGHEST_PRECEDENCE)
 public class GlobalRestExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalRestExceptionHandler.class);
@@ -76,6 +79,7 @@ public class GlobalRestExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(UserNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
     public ResponseEntity<ApiStatusResponse> userNotFound(final UserNotFoundException ex, final WebRequest request) {
         ArrayList<String> errors = new ArrayList<>();
         errors.add(ex.getLocalizedMessage());
@@ -89,6 +93,7 @@ public class GlobalRestExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(RoleNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
     public ResponseEntity<ApiStatusResponse> roleNotFound(final RoleNotFoundException ex, final WebRequest request) {
         ArrayList<String> errors = new ArrayList<>();
         errors.add(ex.getLocalizedMessage());
@@ -102,6 +107,7 @@ public class GlobalRestExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(MessageNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
     public ResponseEntity<ApiStatusResponse> messageNotFound(final MessageNotFoundException ex, final WebRequest request) {
         ArrayList<String> errors = new ArrayList<>();
         errors.add(ex.getLocalizedMessage());
@@ -115,6 +121,7 @@ public class GlobalRestExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(ProductNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
     public ResponseEntity<ApiStatusResponse> productNotFound(final ProductNotFoundException ex, final WebRequest request) {
         ArrayList<String> errors = new ArrayList<>();
         errors.add(ex.getLocalizedMessage());

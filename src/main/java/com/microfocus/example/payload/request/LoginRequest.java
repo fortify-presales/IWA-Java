@@ -21,11 +21,15 @@ package com.microfocus.example.payload.request;
 
 import javax.validation.constraints.NotBlank;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 public class LoginRequest {
+    @Schema(name = "username", example = "user1@localhost.com", required = true)
     @NotBlank
     private String username;
 
     @NotBlank
+    @Schema(name = "password", example = "password", required = true)
     private String password;
 
     public String getUsername() {

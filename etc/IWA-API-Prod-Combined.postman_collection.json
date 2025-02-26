@@ -1,11 +1,11 @@
 {
 	"info": {
-		"_postman_id": "ee24c3f6-e1a7-4d25-8d60-fb7f568a7326",
+		"_postman_id": "a92ac255-349c-4ea8-9ac6-d91b56b0300c",
 		"name": "IWA-API-Combined",
 		"description": "An example collection for security testing of IWA (Insecure Web Application) REST API\n\nThis is a combined collection for use with FoD that doesn't depend on environment or authentication collections.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "13859659",
-		"_collection_link": "https://mfdemouk.postman.co/workspace/My-Workspace~c71e9c5c-d86a-44e4-8a78-9b4f1d507064/collection/13859659-ee24c3f6-e1a7-4d25-8d60-fb7f568a7326?action=share&source=collection_link&creator=13859659"
+		"_collection_link": "https://mfdemouk.postman.co/workspace/c71e9c5c-d86a-44e4-8a78-9b4f1d507064/collection/13859659-a92ac255-349c-4ea8-9ac6-d91b56b0300c?action=share&source=collection_link&creator=13859659"
 	},
 	"item": [
 		{
@@ -527,7 +527,7 @@
 		},
 		{
 			"key": "c_username",
-			"value": "user1@localhost.com",
+			"value": "admin@localhost.com",
 			"type": "string"
 		},
 		{
