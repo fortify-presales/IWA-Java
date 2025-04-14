@@ -86,8 +86,7 @@ pipeline {
             steps {
                 script {
                     // Retrieve GitHub SHA
-                    env.GIT_COMMIT = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
-                    env.GITHUB_SHA =env.GIT_COMMIT
+                    env.GITHUB_SHA = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
                     echo "GitHub SHA:" env.GITHUB_SHA
                     //env.GITHUB_REPOSITORY = "IWA-Java [KAL]"
                     // Retrieve GitHub Repository
