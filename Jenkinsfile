@@ -132,7 +132,7 @@ pipeline {
                         // comment out below to use Fortify on Demand Jenkins Plugin
 
                         sh """
-                            curl -L https://github.com/fortify/fcli/releases/latest/download/fcli-linux.tgz | tar -xz fcli
+                            curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
                             ./fcli --version
                             echo "GITHUB_SHA: ${env.GITHUB_SHA}"
                             echo "GITHUB_REPOSITORY: ${env.GITHUB_REPOSITORY}"
@@ -150,6 +150,43 @@ pipeline {
                     } else {
                         echo "No Static Application Security Testing (SAST) to do."
                     }
+                }
+            }
+        }
+
+        stage('SCA') {
+            when {
+                beforeAgent true
+                anyOf {
+                    expression { params.DEBRICKED_SCA == true }
+                }
+            }
+            agent any
+            steps {
+                script {
+                    if (params.DEBRICKED_SCA) {
+                        script {
+                            // Inspiration taken from https://github.com/trustin/os-maven-plugin/blob/master/src/main/java/kr/motd/maven/os/Detector.java
+                            def osName = System.getProperty("os.name").toLowerCase(Locale.US).replaceAll("[^a-z0-9]+", "")
+                            if (osName.startsWith("linux")) { osName = "linux" }
+                            else if (osName.startsWith("mac") || osName.startsWith("osx")) { osName = "macOS" }
+                            else if (osName.startsWith("windows")) { osName = "windows" }
+                            else { osName = "linux" } // Default to linux
+
+                            def osArch = System.getProperty("os.arch").toLowerCase(Locale.US).replaceAll("[^a-z0-9]+", "")
+                            if (osArch.matches("(x8664|amd64|ia32e|em64t|x64)")) { osArch = "x86_64" }
+                            else if (osArch.matches("(x8632|x86|i[3-6]86|ia32|x32)")) { osArch = "i386" }
+                            else if (osArch.matches("(aarch_64)")) { osArch = "arm64" }
+                            else { osArch = "x86_64" } // Default to x86 64-bit
+
+                            println("OS detected: " + osName + " and architecture " + osArch)
+                            sh 'curl -LsS https://github.com/debricked/cli/releases/download/release-v2/cli_' + osName + '_' + osArch + '.tar.gz | tar -xz debricked'
+                            sh './debricked scan'
+                        }
+                    } else {
+                        echo "No Software Composition Analysis to do."
+                    }
+
                 }
             }
         }
