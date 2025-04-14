@@ -6,14 +6,12 @@
 //
 //
 // Pre-requisites:
-// - Fortify Jenkins plugins has been installed and configured (if not using fcli)
-// - Docker Jenkins Pipeline plugin has been installed
+// - [Optional] Fortify on Demand Jenkins plugin has been installed and configured (if not using fcli)
 // - [Optional] Debricked account
 //
 // Typical node setup:
 // - Create a new Jenkins agent (or reuse one) for running Fortify Commands
-// - Install Fortify CLI (fcli) tool on the agent machine and add to system/agent path
-// - Apply the label "fortify" to the agent.
+// - Install Fortify CLI (fcli) tool on the agent machine and add to system/agent path (default is to download from internet)
 //
 // Credentials setup:
 // Create the following credentials in Jenkins and enter values as follows:
@@ -24,12 +22,6 @@
 // Note: All of the credentials should be created (with empty values if necessary) even if you are not using the capabilities.
 //
 //****************************************************************************************************
-
-// The instances of Docker image and container that are created
-def dockerImage
-def dockerContainer
-def dockerContainerName = "iwa-jenkins"
-def dastScanName = "iwa-jenkins"
 
 pipeline {
     agent any
@@ -47,21 +39,14 @@ pipeline {
                 description: 'Use Fortify on Demand for Dynamic Application Security Testing')
         booleanParam(name: 'DEBRICKED_SCA', defaultValue: params.DEBRICKED_SCA ?: false,
                 description: 'Use Debricked for Open Source Software Composition Analysis')
-        booleanParam(name: 'USE_DOCKER', defaultValue: params.USE_DOCKER ?: false,
-                description: 'Package the application into a Dockerfile for running/testing')
-        booleanParam(name: 'RELEASE_TO_GITHUB', defaultValue: params.RELEASE_TO_GITHUB ?: false,
-                description: 'Release built and tested image to GitHub packages')
     }
 
     environment {
         // Application settings
-        COMPONENT_NAME = "iwa"                              // Short form component name
-        COMPONENT_VERSION = "1.0"                           // Short form component version
-        DOCKER_IMAGE_NAME = "iwa"                           // Docker image name
-        DOCKER_IMAGE_VER = "1.0-build"                      // Docker image version
+        APP_NAME = "iwa"                              // Short form component name
+        APP_VERSION = "1.0"                           // Short form component version
         GIT_URL = scm.getUserRemoteConfigs()[0].getUrl()    // Git Repo
         GIT_REPO_NAME = GIT_URL.split('/').last().replace('.git', '') // Git Repo name
-        JAVA_VERSION = 11                                   // Java version to compile as
 
         // Credential references
         GIT_CREDS = credentials('iwa-git-auth')
@@ -74,7 +59,6 @@ pipeline {
         APP_URL = "${params.APP_URL ?: 'https://iwa.onfortify.com'}" // URL of application to be tested by ScanCentral DAST
         FOD_URL = "${params.FOD_URL ?: 'https://api.emea.fortify.com'}" // URL of Fortify on Demand
         FORTIFY_APP_NAME_POSTFIX = "${params.FORTIFY_APP_NAME_POSTFIX ?: ''}" // Fortify on Demand application name postfix
-        DOCKER_OWNER = "${params.DOCKER_OWNER ?: 'fortify-presales'}" // Docker owner (in GitHub packages) to push released images to
    
         // The following are "set" for use in `fcli action run ci`
         GITHUB_SHA = sh (script: "git rev-parse HEAD", returnStdout: true).trim()
@@ -103,9 +87,9 @@ pipeline {
                     // Record the test results (success)
                     junit "**/build/test-results/test/TEST-*.xml"
                     // Archive the built file
-                    archiveArtifacts "build/libs/${env.COMPONENT_NAME}-${env.COMPONENT_VERSION}.jar"
+                    archiveArtifacts "build/libs/${env.APP_NAME}-${env.APP_VERSION}.jar"
                     // Stash the deployable files
-                    stash includes: "build/libs/${env.COMPONENT_NAME}-${env.COMPONENT_VERSION}.jar", name: "${env.COMPONENT_NAME}_release"
+                    stash includes: "build/libs/${env.APP_NAME}-${env.APP_VERSION}.jar", name: "${env.APP_NAME}_release"
                 }
                 failure {
                     script {
@@ -133,7 +117,6 @@ pipeline {
 
                         sh """
                             curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
-                            ./fcli --version
                             echo "GITHUB_SHA: ${env.GITHUB_SHA}"
                             echo "GITHUB_REPOSITORY: ${env.GITHUB_REPOSITORY}"
                             echo "GITHUB_REF_NAME: ${env.GITHUB_REF_NAME}"
@@ -191,6 +174,43 @@ pipeline {
             }
         }
 
+        stage('Deploy') {
+            agent any
+            steps {
+                script {
+                    // unstash the built files
+                    unstash name: "${env.APP_NAME}_release"
+                    script """
+                        echo "Simulating deploying the application to a server"
+                    """
+                }
+            }
+        }
+
+        stage('DAST') {
+            when {
+                beforeAgent true
+                anyOf {
+                    expression { params.FOD_DAST == true }
+                }
+            }
+            steps {
+                script {
+                    if (params.FOD_DAST) {
+                        sh """
+                            echo "Running DAST scan against: ${env.APP_URL}"
+                            fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
+                            echo fcli fod dast-scan start --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins --store curScan
+                            echo fcli fod dast-scan wait-for ::curScan:: --fod-session jenkins
+                            fcli fod session logout --fod-session jenkins
+                        """
+                    } else {
+                        echo "No Dynamic Application Security Testing (DAST) to do."
+                    }
+                }
+            }
+        }
+
         // An example release gate/checkpoint
         stage('Gate') {
             agent any
@@ -198,6 +218,9 @@ pipeline {
                 script {
                     sh """
                         echo "Running gate check"
+                        fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
+                        fcli fod action run check-policy --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins
+                        fcli fod session logout --fod-session jenkins
                     """
                     //input id: 'Release',
                     //        message: 'Ready to Release?',
