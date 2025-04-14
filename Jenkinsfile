@@ -94,12 +94,10 @@ pipeline {
                 script {
                     // Run gradle to build application
                     sh """
-                        printenv
                         ./gradlew clean build
                     """
                 }
             }
-
             post {
                 success {
                     // Record the test results (success)
@@ -118,6 +116,44 @@ pipeline {
                 }
             }
         }
+
+        stage('SAST') {
+            when {
+                beforeAgent true
+                anyOf {
+                    expression { params.FOD_SAST == true }
+                }
+            }
+            agent any
+            steps {
+                script {
+                    if (params.FOD_SAST) {
+
+                        // comment out below to use Fortify on Demand Jenkins Plugin
+
+                        sh """
+                            curl -L https://github.com/fortify/fcli/releases/latest/download/fcli-linux.tgz | tar -xz fcli
+                            ./fcli --version
+                            echo "GITHUB_SHA: ${env.GITHUB_SHA}"
+                            echo "GITHUB_REPOSITORY: ${env.GITHUB_REPOSITORY}"
+                            echo "GITHUB_REF_NAME: ${env.GITHUB_REF_NAME}"
+                            echo "FOD_URL: ${env.FOD_URL}"
+                            echo "FOD_CLIENT_ID: ${env.FOD_CLIENT_ID}"
+                            echo "FOD_CLIENT_SECRET: ${env.FOD_CLIENT_SECRET}"
+                            ./fcli action run ci
+                        """
+                       
+                        // uncomment below to use Fortify on Demand Jenkins Plugin
+
+                                               
+
+                    } else {
+                        echo "No Static Application Security Testing (SAST) to do."
+                    }
+                }
+            }
+        }
+
         // An example release gate/checkpoint
         stage('Gate') {
             agent any
