@@ -81,8 +81,32 @@ pipeline {
     //}
 
     stages {
-        
-
+        stage('Setup') {
+            agent any
+            steps {
+                script {
+                    // Retrieve GitHub SHA
+                    env.GIT_COMMIT = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
+                    env.GITHUB_SHA =env.GIT_COMMIT
+                    echo "GitHub SHA:" env.GITHUB_SHA
+                    //env.GITHUB_REPOSITORY = "IWA-Java [KAL]"
+                    // Retrieve GitHub Repository
+                    env.GITHUB_REPOSITORY = sh (
+                        script: 'basename `git rev-parse --show-toplevel`',
+                        returnStdout: true
+                    ).trim().concat(${env.FORTIFY_APP_NAME_POSTFIX})
+                    echo "GitHub Repository:" env.GITHUB_REPOSITORY
+                    // Retrieve GitHub Ref Name - hardcoded for testing
+                    env.GITHUB_REF_NAME = "jenkins"
+                    // Uncomment below to retrieve the real branch name
+                    //env.GITHUB_REF_NAME = sh(
+                    //    script: 'git rev-parse --abbrev-ref HEAD',
+                    //    returnStdout: true
+                    //).trim()
+                    echo "GitHub Ref Name:" env.GITHUB_REF_NAME
+                }
+            }
+        }
         // An example release gate/checkpoint
         stage('Gate') {
             agent any
