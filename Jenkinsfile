@@ -76,8 +76,8 @@ pipeline {
         DOCKER_OWNER = "${params.DOCKER_OWNER ?: 'fortify-presales'}" // Docker owner (in GitHub packages) to push released images to
    
         GITHUB_SHA = sh (script: "git rev-parse HEAD", returnStdout: true).trim()
-        GITHUB_REPOSITORY = "IWA-Java [KAL]" // Hardcoded for testing
-        //GITHUB_REPOSITORY = sh (script: 'basename `git rev-parse --show-toplevel`', returnStdout: true).trim().concat(${env.FORTIFY_APP_NAME_POSTFIX})
+        //GITHUB_REPOSITORY = "IWA-Java [KAL]" // Hardcoded for testing
+        GITHUB_REPOSITORY = sh (script: 'basename `git rev-parse --show-toplevel`', returnStdout: true).trim().concat($FORTIFY_APP_NAME_POSTFIX)
         GITHUB_REF_NAME = "jenkins" // Hardcoded for testing
         //GITHUB_REF_NAME = sh (script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
     }  
