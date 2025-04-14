@@ -90,16 +90,17 @@ pipeline {
                         ./fcli --version
                     """
                     // Retrieve GitHub SHA
-                    env.GITHUB_SHA = sh(
+                    env.GITHUB_SHA = sh (
                         script: 'git rev-parse HEAD',
                         returnStdout: true
                     ).trim()
                     echo "GitHub SHA: ${env.GITHUB_SHA}"
+                    env.GITHUB_REPOSITORY = "IWA-Java${FORTIFY_APP_NAME_POSTFIX}"
                     // Retrieve GitHub Repository
-                    env.GITHUB_REPOSITORY = sh(
-                        script: 'basename `git rev-parse --show-toplevel`',
-                        returnStdout: true
-                    ).trim().concat(${env.FORTIFY_APP_NAME_POSTFIX})
+                    //env.GITHUB_REPOSITORY = sh (
+                    //    script: 'basename `git rev-parse --show-toplevel`',
+                    //    returnStdout: true
+                    //).trim().concat(${env.FORTIFY_APP_NAME_POSTFIX})
                     echo "GitHub Repository: ${GITHUB_REPOSITORY}${env.FORTIFY_APP_NAME_POSTFIX}"
                     // Retrieve GitHub Ref Name - hardcoded for testing
                     env.GITHUB_REF_NAME = "jenkins"
@@ -159,7 +160,7 @@ pipeline {
                         // comment out below to use Fortify Jenkins Plugin
 
                         sh """
-                            fcli action run ci
+                            ./fcli action run ci
                         """
                        
                         // uncomment below to use Fortify Jenkins Plugin
@@ -324,23 +325,12 @@ pipeline {
             script {
                 // check if container is still running and if so stop/remove it
                 if (params.USE_DOCKER) {
-                    if (isUnix()) {
-                        sh(script: "docker ps -aq --filter name=${dockerContainerName} > container.id")
-                        if (fileExists('container.id')) {
-                            def existingId = readFile('container.id').trim()
-                            if (existingId) {
-                                echo "Found existing ${dockerContainerName} container id: ${existingId} ... deleting..."
-                                sh(script: "docker stop $existingId && docker rm -f $existingId")
-                            }
-                        }
-                    } else {
-                        bat(script: "docker ps -aq --filter name=${dockerContainerName} > container.id")
-                        if (fileExists('container.id')) {
-                            def existingId = readFile('container.id').trim()
-                            if (existingId) {
-                                echo "Found existing ${dockerContainerName} container id: ${existingId} ... deleting..."
-                                bat(script: "docker stop ${existingId} && docker rm -f ${existingId}")
-                            }
+                    sh(script: "docker ps -aq --filter name=${dockerContainerName} > container.id")
+                    if (fileExists('container.id')) {
+                        def existingId = readFile('container.id').trim()
+                        if (existingId) {
+                            echo "Found existing ${dockerContainerName} container id: ${existingId} ... deleting..."
+                            sh(script: "docker stop $existingId && docker rm -f $existingId")
                         }
                     }
                 }
