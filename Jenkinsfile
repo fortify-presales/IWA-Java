@@ -74,35 +74,46 @@ pipeline {
         FOD_URL = "${params.FOD_URL ?: 'https://api.emea.fortify.com'}" // URL of Fortify on Demand
         FORTIFY_APP_NAME_POSTFIX = "${params.FORTIFY_APP_NAME_POSTFIX ?: ''}" // Fortify on Demand application name postfix
         DOCKER_OWNER = "${params.DOCKER_OWNER ?: 'fortify-presales'}" // Docker owner (in GitHub packages) to push released images to
-    }
+   
+        GITHUB_SHA = sh (script: "git rev-parse HEAD", returnStdout: true).trim()
+        GITHUB_REPOSITORY = "IWA-Java [KAL]" // Hardcoded for testing
+        //GITHUB_REPOSITORY = sh (script: 'basename `git rev-parse --show-toplevel`', returnStdout: true).trim().concat(${env.FORTIFY_APP_NAME_POSTFIX})
+        GITHUB_REF_NAME = "jenkins" // Hardcoded for testing
+        //GITHUB_REF_NAME = sh (script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+    }  
 
     //tools {
     //
     //}
 
     stages {
-        stage('Setup') {
+        stage('Build') {
             agent any
             steps {
                 script {
-                    // Retrieve GitHub SHA
-                    env.GITHUB_SHA = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
-                    echo "GitHub SHA:" env.GITHUB_SHA
-                    //env.GITHUB_REPOSITORY = "IWA-Java [KAL]"
-                    // Retrieve GitHub Repository
-                    env.GITHUB_REPOSITORY = sh (
-                        script: 'basename `git rev-parse --show-toplevel`',
-                        returnStdout: true
-                    ).trim().concat(${env.FORTIFY_APP_NAME_POSTFIX})
-                    echo "GitHub Repository:" env.GITHUB_REPOSITORY
-                    // Retrieve GitHub Ref Name - hardcoded for testing
-                    env.GITHUB_REF_NAME = "jenkins"
-                    // Uncomment below to retrieve the real branch name
-                    //env.GITHUB_REF_NAME = sh(
-                    //    script: 'git rev-parse --abbrev-ref HEAD',
-                    //    returnStdout: true
-                    //).trim()
-                    echo "GitHub Ref Name:" env.GITHUB_REF_NAME
+                    // Run gradle to build application
+                    sh """
+                        printenv
+                        ./gradlew clean build
+                    """
+                }
+            }
+
+            post {
+                success {
+                    // Record the test results (success)
+                    junit "**/build/test-results/test/TEST-*.xml"
+                    // Archive the built file
+                    archiveArtifacts "build/libs/${env.COMPONENT_NAME}-${env.COMPONENT_VERSION}.jar"
+                    // Stash the deployable files
+                    stash includes: "build/libs/${env.COMPONENT_NAME}-${env.COMPONENT_VERSION}.jar", name: "${env.COMPONENT_NAME}_release"
+                }
+                failure {
+                    script {
+                        if (fileExists('build/test-results/test')) {
+                            junit "**/build/test-results/test/TEST-*.xml"
+                        }
+                    }
                 }
             }
         }
