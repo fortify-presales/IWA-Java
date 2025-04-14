@@ -85,10 +85,6 @@ pipeline {
             agent any
             steps {
                 script {
-                    sh """
-                        curl -L https://github.com/fortify/fcli/releases/latest/download/fcli-linux.tgz | tar -xz fcli
-                        ./fcli --version
-                    """
                     // Retrieve GitHub SHA
                     //env.GIT_COMMIT = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
                     //env.GITHUB_SHA =env.GIT_COMMIT
@@ -148,8 +144,7 @@ pipeline {
                     expression { params.FOD_SAST == true }
                 }
             }
-            // Run on an Agent with "fortify" label applied
-            agent {label "fortify"}
+            agent any
             steps {
                 script {
                     if (params.FOD_SAST) {
@@ -157,6 +152,8 @@ pipeline {
                         // comment out below to use Fortify on Demand Jenkins Plugin
 
                         sh """
+                            curl -L https://github.com/fortify/fcli/releases/latest/download/fcli-linux.tgz | tar -xz fcli
+                            ./fcli --version
                             ./fcli action run ci
                         """
                        
