@@ -60,6 +60,7 @@ pipeline {
         DOCKER_IMAGE_NAME = "iwa"                           // Docker image name
         DOCKER_IMAGE_VER = "1.0-build"                      // Docker image version
         GIT_URL = scm.getUserRemoteConfigs()[0].getUrl()    // Git Repo
+        GIT_REPO_NAME = GIT_URL.split('/').last().replace('.git', '') // Git Repo name
         JAVA_VERSION = 11                                   // Java version to compile as
 
         // Credential references
@@ -75,9 +76,9 @@ pipeline {
         FORTIFY_APP_NAME_POSTFIX = "${params.FORTIFY_APP_NAME_POSTFIX ?: ''}" // Fortify on Demand application name postfix
         DOCKER_OWNER = "${params.DOCKER_OWNER ?: 'fortify-presales'}" // Docker owner (in GitHub packages) to push released images to
    
+        // The following are "set" for use in `fcli action run ci`
         GITHUB_SHA = sh (script: "git rev-parse HEAD", returnStdout: true).trim()
-        //GITHUB_REPOSITORY = "IWA-Java [KAL]" // Hardcoded for testing
-        GITHUB_REPOSITORY = sh (script: 'basename `git rev-parse --show-toplevel`', returnStdout: true).trim().concat(" [KAL]") // Hardcoded for testing
+        GITHUB_REPOSITORY = "${env.GIT_REPO_NAME}${env.FORTIFY_APP_NAME_POSTFIX}"
         GITHUB_REF_NAME = "jenkins" // Hardcoded for testing
         //GITHUB_REF_NAME = sh (script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
     }  
