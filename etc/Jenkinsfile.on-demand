@@ -90,10 +90,10 @@ pipeline {
                         ./fcli --version
                     """
                     // Retrieve GitHub SHA
-                    env.GITHUB_SHA = sh (
-                        script: 'git rev-parse HEAD',
-                        returnStdout: true
-                    ).trim()
+                    //env.GITHUB_SHA = sh (
+                    //    script: 'git rev-parse HEAD',
+                    //    returnStdout: true
+                    //).trim()
                     echo "GitHub SHA: ${env.GITHUB_SHA}"
                     env.GITHUB_REPOSITORY = "IWA-Java${FORTIFY_APP_NAME_POSTFIX}"
                     // Retrieve GitHub Repository
@@ -157,43 +157,15 @@ pipeline {
                 script {
                     if (params.FOD_SAST) {
 
-                        // comment out below to use Fortify Jenkins Plugin
+                        // comment out below to use Fortify on Demand Jenkins Plugin
 
                         sh """
                             ./fcli action run ci
                         """
                        
-                        // uncomment below to use Fortify Jenkins Plugin
+                        // uncomment below to use Fortify on Demand Jenkins Plugin
 
-                        // Set Remote Analysis options
-                        //def transOptions = '"-exclude \"**/Test/*.java\""'
-                        //def scanOptions = '"-scan-policy '.concat("${env.SCAN_POLICY}").concat('"')
-                        //fortifyRemoteArguments transOptions: "${transOptions}", scanOptions: "${scanOptions}"
-                        //
-                        //if (params.UPLOAD_TO_SSC) {
-                            // Remote analysis (using Scan Central) with upload to SSC
-                        //    fortifyRemoteAnalysis remoteAnalysisProjectType: fortifyGradle(buildFile: 'build.gradle', skipBuild: false),
-                        //            remoteOptionalConfig: [
-                        //                    customRulepacks: "${env.WORKSPACE}" + "/etc/example-custom-rules.xml",
-                        //                    filterFile     : "${env.WORKSPACE}" + "/etc/example-filter.txt",
-                        //                    notifyEmail    : "${env.SSC_NOTIFY_EMAIL}",
-                        //                    sensorPoolUUID : "${env.SSC_SENSOR_POOL_UUID}"
-                        //            ],
-                        //            uploadSSC: [
-                        //                    appName   : "${env.SSC_APP_NAME}",
-                        //                    appVersion: "${env.SSC_APP_VERSION}"
-                        //            ]
-                        //} else {
-                            // Remote analysis (using Scan Central)
-                        //    fortifyRemoteAnalysis remoteAnalysisProjectType: fortifyGradle(buildFile: 'build.gradle', skipBuild: false),
-                        //            remoteOptionalConfig: [
-                        //                    customRulepacks: "${env.WORKSPACE}" + "/etc/example-custom-rules.xml",
-                        //                    filterFile     : "${env.WORKSPACE}" + "/etc/example-filter.txt",
-                        //                    notifyEmail   : "${env.SSC_NOTIFY_EMAIL}",
-                        //                    sensorPoolUUID: "${env.SSC_SENSOR_POOL_UUID}"
-                        //            ]
-                        //}
-                        
+                                               
 
                     } else {
                         echo "No Static Application Security Testing (SAST) to do."
