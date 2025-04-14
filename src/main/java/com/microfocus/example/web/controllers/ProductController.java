@@ -132,7 +132,7 @@ public class ProductController extends AbstractBaseController {
         Resource resource;
         File dataDir;
 
-        if (!activeProfile.contains("prod")) {
+        if (activeProfile.contains("dev") || activeProfile.contains("test")) {
             log.debug("Running dev/test profile: downloading from filesystem");
             try {
                 dataDir = ResourceUtils.getFile("classpath:data");
