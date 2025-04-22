@@ -127,11 +127,11 @@ pipeline {
                         //"""
                        
                         // uncomment below to use Fortify on Demand Jenkins Plugin
-                        fodStaticAssessment inProgressBuildResultType: 'WarnBuild', inProgressScanActionType: 'Queue', 
-                            releaseId: "${env.FOD_RELEASE_ID}", remediationScanPreferenceType: 'NonRemediationScanOnly', isMicroservice: false,
+                        fodStaticAssessment applicationName: "${env.GITHUB_REPOSITORY}", releaseName: "${env.GITHUB_REF_NAME}",  isMicroservice: false,
+                            inProgressBuildResultType: 'WarnBuild', inProgressScanActionType: 'Queue', remediationScanPreferenceType: 'NonRemediationScanOnly',
                             scanCentral: 'Gradle', scanCentralBuildCommand: './gradlew clean build', scanCentralBuildFile: 'build.gradle'
 
-                        fodPollResults policyFailureBuildResultPreference: 1, pollingInterval: 5, releaseId: "${env.FOD_RELEASE_ID}"
+                        fodPollResults applicationName: "${env.GITHUB_REPOSITORY}", releaseName: "${env.GITHUB_REF_NAME}", policyFailureBuildResultPreference: 1, pollingInterval: 5
 
                     } else {
                         echo "No Static Application Security Testing (SAST) to do."
