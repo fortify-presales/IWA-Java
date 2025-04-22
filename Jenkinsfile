@@ -128,7 +128,7 @@ pipeline {
                        
                         // uncomment below to use Fortify on Demand Jenkins Plugin
                         fodStaticAssessment inProgressBuildResultType: 'WarnBuild', inProgressScanActionType: 'Queue', 
-                            releaseId: "${env.FOD_RELEASE_ID}", remediationScanPreferenceType: 'NonRemediationScanOnly', 
+                            releaseId: "${env.FOD_RELEASE_ID}", remediationScanPreferenceType: 'NonRemediationScanOnly', isMicroservice: false,
                             scanCentral: 'Gradle', scanCentralBuildCommand: './gradlew clean build', scanCentralBuildFile: 'build.gradle'
 
                         fodPollResults policyFailureBuildResultPreference: 1, pollingInterval: 5, releaseId: "${env.FOD_RELEASE_ID}"
