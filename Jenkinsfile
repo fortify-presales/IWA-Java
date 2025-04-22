@@ -131,7 +131,7 @@ pipeline {
                             releaseId: "${env.FOD_RELEASE_ID}", remediationScanPreferenceType: 'NonRemediationScanOnly', 
                             scanCentral: 'Gradle', scanCentralBuildCommand: './gradlew clean build', scanCentralBuildFile: 'build.gradle'
 
-                        fodPollResults policyFailureBuildResultPreference: 1, pollingInterval: 5, releaseId: "${env.FOD_RELEASE_ID}""
+                        fodPollResults policyFailureBuildResultPreference: 1, pollingInterval: 5, releaseId: "${env.FOD_RELEASE_ID}"
 
                     } else {
                         echo "No Static Application Security Testing (SAST) to do."
