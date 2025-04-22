@@ -34,3 +34,4 @@ bin/test
 gradle.debricked.lock
 sc.gradle.debricked.lock
 debricked.fingerprints.txt
+fcli.env
