@@ -59,6 +59,7 @@ pipeline {
         APP_URL = "${params.APP_URL ?: 'https://iwa.onfortify.com'}" // URL of application to be tested by ScanCentral DAST
         FOD_URL = "${params.FOD_URL ?: 'https://api.emea.fortify.com'}" // URL of Fortify on Demand
         FORTIFY_APP_NAME_POSTFIX = "${params.FORTIFY_APP_NAME_POSTFIX ?: ''}" // Fortify on Demand application name postfix
+        FOD_RELEASE_ID = "${params.FOD_RELEASE_ID ?: '0'}" // Fortify on Demand release id
    
         // The following are "set" for use in `fcli action run ci`
         GITHUB_SHA = sh (script: "git rev-parse HEAD", returnStdout: true).trim()
@@ -120,6 +121,7 @@ pipeline {
                             echo "FOD_URL: ${env.FOD_URL}"
                             echo "FOD_CLIENT_ID: ${env.FOD_CLIENT_ID}"
                             echo "FOD_CLIENT_SECRET: ${env.FOD_CLIENT_SECRET}"
+                            echo "FOD_RELEASE_ID: ${env.FOD_RELEASE_ID}"
                         """
 
                         // uncomment below to use fcli
@@ -131,10 +133,10 @@ pipeline {
                        
                         // uncomment below to use Fortify on Demand Jenkins Plugin
                         // comment out below to use fcli
-                        fodStaticAssessment applicationName: "IWA-Java [KAL]", releaseName: "jenkins",  isMicroservice: false,
+                        fodStaticAssessment releaseId: "${env.FOD_RELEASE_ID}",  isMicroservice: false,
                             inProgressBuildResultType: 'WarnBuild', inProgressScanActionType: 'Queue', remediationScanPreferenceType: 'NonRemediationScanOnly',
                             scanCentral: 'Gradle', scanCentralBuildCommand: './gradlew clean build', scanCentralBuildFile: 'build.gradle'
-                        fodPollResults applicationName: "IWA-Java [KAL]", releaseName: "jenkins", policyFailureBuildResultPreference: 1, pollingInterval: 5
+                        fodPollResults releaseId: "${env.FOD_RELEASE_ID}", policyFailureBuildResultPreference: 1, pollingInterval: 5
 
                     } else {
                         echo "No Static Application Security Testing (SAST) to do."
