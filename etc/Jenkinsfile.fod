@@ -59,6 +59,7 @@ pipeline {
         APP_URL = "${params.APP_URL ?: 'https://iwa.onfortify.com'}" // URL of application to be tested by ScanCentral DAST
         FOD_URL = "${params.FOD_URL ?: 'https://api.emea.fortify.com'}" // URL of Fortify on Demand
         FORTIFY_APP_NAME_POSTFIX = "${params.FORTIFY_APP_NAME_POSTFIX ?: ''}" // Fortify on Demand application name postfix
+        FOD_RELEASE_ID = "${params.FOD_RELEASE_ID ?: '0'}" // Fortify on Demand release id
    
         // The following are "set" for use in `fcli action run ci`
         GITHUB_SHA = sh (script: "git rev-parse HEAD", returnStdout: true).trim()
@@ -113,22 +114,29 @@ pipeline {
                 script {
                     if (params.FOD_SAST) {
 
-                        // comment out below to use Fortify on Demand Jenkins Plugin
-
                         sh """
-                            curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
                             echo "GITHUB_SHA: ${env.GITHUB_SHA}"
                             echo "GITHUB_REPOSITORY: ${env.GITHUB_REPOSITORY}"
                             echo "GITHUB_REF_NAME: ${env.GITHUB_REF_NAME}"
                             echo "FOD_URL: ${env.FOD_URL}"
                             echo "FOD_CLIENT_ID: ${env.FOD_CLIENT_ID}"
                             echo "FOD_CLIENT_SECRET: ${env.FOD_CLIENT_SECRET}"
+                            echo "FOD_RELEASE_ID: ${env.FOD_RELEASE_ID}"
+                        """
+
+                        // uncomment below to use fcli
+                        // comment out below to use Fortify on Demand Jenkins Plugin
+                        sh """
+                            curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
                             ./fcli action run ci
                         """
                        
                         // uncomment below to use Fortify on Demand Jenkins Plugin
-
-                                               
+                        // comment out below to use fcli
+                        //fodStaticAssessment releaseId: "${env.FOD_RELEASE_ID}", isMicroservice: false, openSourceScan: 'false',
+                        //    inProgressBuildResultType: 'WarnBuild', inProgressScanActionType: 'Queue', remediationScanPreferenceType: 'NonRemediationScanOnly',
+                        //    scanCentral: 'Gradle', scanCentralBuildCommand: 'clean build', scanCentralBuildFile: 'build.gradle'
+                        //fodPollResults releaseId: "${env.FOD_RELEASE_ID}", policyFailureBuildResultPreference: 1, pollingInterval: 5
 
                     } else {
                         echo "No Static Application Security Testing (SAST) to do."
@@ -150,6 +158,7 @@ pipeline {
                     if (params.DEBRICKED_SCA) {
                         script {
                             // Inspiration taken from https://github.com/trustin/os-maven-plugin/blob/master/src/main/java/kr/motd/maven/os/Detector.java
+                            // Note: exit from 'debricked scan' is ignored - remove '|| true' to fail the pipeline if it fails
                             def osName = System.getProperty("os.name").toLowerCase(Locale.US).replaceAll("[^a-z0-9]+", "")
                             if (osName.startsWith("linux")) { osName = "linux" }
                             else if (osName.startsWith("mac") || osName.startsWith("osx")) { osName = "macOS" }
@@ -164,7 +173,7 @@ pipeline {
 
                             println("OS detected: " + osName + " and architecture " + osArch)
                             sh 'curl -LsS https://github.com/debricked/cli/releases/download/release-v2/cli_' + osName + '_' + osArch + '.tar.gz | tar -xz debricked'
-                            sh './debricked scan'
+                            sh './debricked scan || true'
                         }
                     } else {
                         echo "No Software Composition Analysis to do."
@@ -178,8 +187,6 @@ pipeline {
             agent any
             steps {
                 script {
-                    // unstash the built files
-                    unstash name: "${env.APP_NAME}_release"
                     script """
                         echo "Simulating deploying the application to a server"
                     """

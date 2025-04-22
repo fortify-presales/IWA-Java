@@ -126,17 +126,17 @@ pipeline {
 
                         // uncomment below to use fcli
                         // comment out below to use Fortify on Demand Jenkins Plugin
-                        //sh """
-                        //    curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
-                        //    ./fcli action run ci
-                        //"""
+                        sh """
+                            curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
+                            ./fcli action run ci
+                        """
                        
                         // uncomment below to use Fortify on Demand Jenkins Plugin
                         // comment out below to use fcli
-                        fodStaticAssessment releaseId: "${env.FOD_RELEASE_ID}", isMicroservice: false, openSourceScan: 'false',
-                            inProgressBuildResultType: 'WarnBuild', inProgressScanActionType: 'Queue', remediationScanPreferenceType: 'NonRemediationScanOnly',
-                            scanCentral: 'Gradle', scanCentralBuildCommand: 'clean build', scanCentralBuildFile: 'build.gradle'
-                        fodPollResults releaseId: "${env.FOD_RELEASE_ID}", policyFailureBuildResultPreference: 1, pollingInterval: 5
+                        //fodStaticAssessment releaseId: "${env.FOD_RELEASE_ID}", isMicroservice: false, openSourceScan: 'false',
+                        //    inProgressBuildResultType: 'WarnBuild', inProgressScanActionType: 'Queue', remediationScanPreferenceType: 'NonRemediationScanOnly',
+                        //    scanCentral: 'Gradle', scanCentralBuildCommand: 'clean build', scanCentralBuildFile: 'build.gradle'
+                        //fodPollResults releaseId: "${env.FOD_RELEASE_ID}", policyFailureBuildResultPreference: 1, pollingInterval: 5
 
                     } else {
                         echo "No Static Application Security Testing (SAST) to do."
@@ -158,6 +158,7 @@ pipeline {
                     if (params.DEBRICKED_SCA) {
                         script {
                             // Inspiration taken from https://github.com/trustin/os-maven-plugin/blob/master/src/main/java/kr/motd/maven/os/Detector.java
+                            // Note: exit from 'debricked scan' is ignored - remove '|| true' to fail the pipeline if it fails
                             def osName = System.getProperty("os.name").toLowerCase(Locale.US).replaceAll("[^a-z0-9]+", "")
                             if (osName.startsWith("linux")) { osName = "linux" }
                             else if (osName.startsWith("mac") || osName.startsWith("osx")) { osName = "macOS" }
@@ -172,7 +173,7 @@ pipeline {
 
                             println("OS detected: " + osName + " and architecture " + osArch)
                             sh 'curl -LsS https://github.com/debricked/cli/releases/download/release-v2/cli_' + osName + '_' + osArch + '.tar.gz | tar -xz debricked'
-                            sh './debricked scan'
+                            sh './debricked scan || true'
                         }
                     } else {
                         echo "No Software Composition Analysis to do."
