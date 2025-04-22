@@ -115,23 +115,23 @@ pipeline {
 
                         // comment out below to use Fortify on Demand Jenkins Plugin
 
-                        sh """
-                            curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
-                            echo "GITHUB_SHA: ${env.GITHUB_SHA}"
-                            echo "GITHUB_REPOSITORY: ${env.GITHUB_REPOSITORY}"
-                            echo "GITHUB_REF_NAME: ${env.GITHUB_REF_NAME}"
-                            echo "FOD_URL: ${env.FOD_URL}"
-                            echo "FOD_CLIENT_ID: ${env.FOD_CLIENT_ID}"
-                            echo "FOD_CLIENT_SECRET: ${env.FOD_CLIENT_SECRET}"
-                            ./fcli action run ci
-                        """
+                        //sh """
+                        //    curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
+                        //    echo "GITHUB_SHA: ${env.GITHUB_SHA}"
+                        //    echo "GITHUB_REPOSITORY: ${env.GITHUB_REPOSITORY}"
+                        //    echo "GITHUB_REF_NAME: ${env.GITHUB_REF_NAME}"
+                        //    echo "FOD_URL: ${env.FOD_URL}"
+                        //    echo "FOD_CLIENT_ID: ${env.FOD_CLIENT_ID}"
+                        //    echo "FOD_CLIENT_SECRET: ${env.FOD_CLIENT_SECRET}"
+                        //    ./fcli action run ci
+                        //"""
                        
                         // uncomment below to use Fortify on Demand Jenkins Plugin
-                        //fodStaticAssessment inProgressBuildResultType: 'WarnBuild', inProgressScanActionType: 'Queue', 
-                        //    releaseId: "${env.FOD_RELEASE_ID}", remediationScanPreferenceType: 'NonRemediationScanOnly', 
-                        //    scanCentral: 'Gradle', scanCentralBuildCommand: './gradlew clean build', scanCentralBuildFile: 'build.gradle', 
+                        fodStaticAssessment inProgressBuildResultType: 'WarnBuild', inProgressScanActionType: 'Queue', 
+                            releaseId: "${env.FOD_RELEASE_ID}", remediationScanPreferenceType: 'NonRemediationScanOnly', 
+                            scanCentral: 'Gradle', scanCentralBuildCommand: './gradlew clean build', scanCentralBuildFile: 'build.gradle', 
 
-                        //fodPollResults policyFailureBuildResultPreference: 1, pollingInterval: 5, releaseId: "${env.FOD_RELEASE_ID}""
+                        fodPollResults policyFailureBuildResultPreference: 1, pollingInterval: 5, releaseId: "${env.FOD_RELEASE_ID}""
 
                     } else {
                         echo "No Static Application Security Testing (SAST) to do."
