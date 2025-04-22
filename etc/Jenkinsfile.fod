@@ -187,7 +187,7 @@ pipeline {
             agent any
             steps {
                 script {
-                    script """
+                    sh """
                         echo "Simulating deploying the application to a server"
                     """
                 }
