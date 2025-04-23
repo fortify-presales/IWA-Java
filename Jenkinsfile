@@ -127,7 +127,7 @@ pipeline {
                         // uncomment below to use fcli
                         // comment out below to use Fortify on Demand Jenkins Plugin
                         sh """
-                            curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
+                            curl -L https://github.com/fortify/fcli/releases/download/latest/fcli-linux.tgz | tar -xz fcli
                             ./fcli action run ci
                         """
                        
@@ -205,6 +205,7 @@ pipeline {
                 script {
                     if (params.FOD_DAST) {
                         sh """
+                            curl -L https://github.com/fortify/fcli/releases/download/latest/fcli-linux.tgz | tar -xz fcli
                             echo "Running DAST scan against: ${env.APP_URL}"
                             fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
                             echo fcli fod dast-scan start --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins --store curScan
@@ -224,6 +225,7 @@ pipeline {
             steps {
                 script {
                     sh """
+                        curl -L https://github.com/fortify/fcli/releases/download/latest/fcli-linux.tgz | tar -xz fcli
                         echo "Running gate check"
                         fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
                         fcli fod action run check-policy --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins
