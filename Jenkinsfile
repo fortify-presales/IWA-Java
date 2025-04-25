@@ -206,10 +206,11 @@ pipeline {
                     if (params.FOD_DAST) {
                         sh """
                             echo "Running DAST scan against: ${env.APP_URL}"
-                            fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
-                            echo fcli fod dast-scan start --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins --store curScan
-                            echo fcli fod dast-scan wait-for ::curScan:: --fod-session jenkins
-                            fcli fod session logout --fod-session jenkins
+                            curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
+                            ./fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
+                            echo ./fcli fod dast-scan start --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins --store curScan
+                            echo ./fcli fod dast-scan wait-for ::curScan:: --fod-session jenkins
+                            ./fcli fod session logout --fod-session jenkins
                         """
                     } else {
                         echo "No Dynamic Application Security Testing (DAST) to do."
@@ -225,9 +226,10 @@ pipeline {
                 script {
                     sh """
                         echo "Running gate check"
-                        fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
-                        fcli fod action run check-policy --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins
-                        fcli fod session logout --fod-session jenkins
+                        curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
+                        ./fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
+                        ./fcli fod action run check-policy --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins
+                        ./fcli fod session logout --fod-session jenkins
                     """
                     //input id: 'Release',
                     //        message: 'Ready to Release?',

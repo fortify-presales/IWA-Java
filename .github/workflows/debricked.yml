@@ -28,6 +28,7 @@ on:
 
 # Global environment variables
 env:
+  DEFAULT_ORG_NAME: "fortify-presales"
   DEFAULT_APP_NAME: "IWA-Java"
   GRADLE_VERSION: "7.6.4"
 
@@ -59,17 +60,17 @@ jobs:
         with:
           export-path: true
           fcli: latest
+          debricked-cli: latest
       # Run debricked scan    
       - name: Run debricked scan
         # Normally you would comment the following out - this is for demo
         continue-on-error: true
         shell: bash
         run: |
-            curl -L https://github.com/debricked/cli/releases/latest/download/cli_linux_x86_64.tar.gz | tar -xz debricked
-            chmod +x debricked
-            ./debricked scan --callgraph --prefer-npm -r "${APP_NAME}" --access-token="${DEBRICKED_TOKEN}"  -e "*/**.lock" -e "**/build/classes/test/**" -e "**/target/classes/test-classes/**" .
+            debricked fingerprint
+            debricked scan --prefer-npm -r "${APP_NAME}" -t "${DEBRICKED_TOKEN}" -e "*/**.lock" -e "**/build/classes/test/**" -e "**/target/classes/test-classes/**" .
         env:
-          APP_NAME: ${{ env.DEFAULT_APP_NAME }}
+          APP_NAME: ${{ format('{0}/{1}', env.DEFAULT_ORG_NAME, env.DEFAULT_APP_NAME) }}
           DEBRICKED_TOKEN: ${{ secrets.DEBRICKED_TOKEN }}
 
   Debricked-FoD-Import:
@@ -114,7 +115,7 @@ jobs:
           fcli fod oss-scan import-debricked --release "${FOD_APP_NAME}:${FOD_RELEASE_NAME}" -r "${APP_NAME}" -t "${DEBRICKED_TOKEN}" -b "${BRANCH_NAME}" --chunk-size ${CHUNK_SIZE} --file sbom.json --session github-actions
           fcli fod session logout --session github-actions
         env:
-          APP_NAME: ${{ env.DEFAULT_APP_NAME }}
+          APP_NAME: ${{ format('{0}/{1}', env.DEFAULT_ORG_NAME, env.DEFAULT_APP_NAME) }}
           BRANCH_NAME: ${{ github.ref_name }}
           DEBRICKED_TOKEN: ${{ secrets.DEBRICKED_TOKEN }}
           CHUNK_SIZE: "1073741824"
