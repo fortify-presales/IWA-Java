@@ -60,13 +60,13 @@ pipeline {
         FOD_URL = "${params.FOD_URL ?: 'https://api.emea.fortify.com'}" // URL of Fortify on Demand
         FORTIFY_APP_NAME_POSTFIX = "${params.FORTIFY_APP_NAME_POSTFIX ?: ''}" // Fortify on Demand application name postfix
         FOD_RELEASE_ID = "${params.FOD_RELEASE_ID ?: '0'}" // Fortify on Demand release id
-   
+
         // The following are "set" for use in `fcli action run ci`
         GITHUB_SHA = sh (script: "git rev-parse HEAD", returnStdout: true).trim()
         GITHUB_REPOSITORY = "${env.GIT_REPO_NAME}${env.FORTIFY_APP_NAME_POSTFIX}"
         GITHUB_REF_NAME = "jenkins" // Hardcoded for testing
         //GITHUB_REF_NAME = sh (script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
-    }  
+    }
 
     //tools {
     //
@@ -127,10 +127,10 @@ pipeline {
                         // uncomment below to use fcli
                         // comment out below to use Fortify on Demand Jenkins Plugin
                         sh """
-                            curl -L https://github.com/fortify/fcli/releases/download/v3.1.1/fcli-linux.tgz | tar -xz fcli
+                            curl -L https://github.com/fortify/fcli/releases/download/latest/fcli-linux.tgz | tar -xz fcli
                             ./fcli action run ci
                         """
-                       
+
                         // uncomment below to use Fortify on Demand Jenkins Plugin
                         // comment out below to use fcli
                         //fodStaticAssessment releaseId: "${env.FOD_RELEASE_ID}", isMicroservice: false, openSourceScan: 'false',
@@ -205,11 +205,12 @@ pipeline {
                 script {
                     if (params.FOD_DAST) {
                         sh """
+                            curl -L https://github.com/fortify/fcli/releases/download/latest/fcli-linux.tgz | tar -xz fcli
                             echo "Running DAST scan against: ${env.APP_URL}"
-                            fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
-                            echo fcli fod dast-scan start --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins --store curScan
-                            echo fcli fod dast-scan wait-for ::curScan:: --fod-session jenkins
-                            fcli fod session logout --fod-session jenkins
+                            ./fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
+                            echo ./fcli fod dast-scan start --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins --store curScan
+                            echo ./fcli fod dast-scan wait-for ::curScan:: --fod-session jenkins
+                            ./fcli fod session logout --fod-session jenkins
                         """
                     } else {
                         echo "No Dynamic Application Security Testing (DAST) to do."
@@ -224,10 +225,11 @@ pipeline {
             steps {
                 script {
                     sh """
+                        curl -L https://github.com/fortify/fcli/releases/download/latest/fcli-linux.tgz | tar -xz fcli
                         echo "Running gate check"
-                        fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
-                        fcli fod action run check-policy --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins
-                        fcli fod session logout --fod-session jenkins
+                        ./fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
+                        ./fcli fod action run check-policy --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins
+                        ./fcli fod session logout --fod-session jenkins
                     """
                     //input id: 'Release',
                     //        message: 'Ready to Release?',
