@@ -1,0 +1,92 @@
+spec:
+  inputs:
+    debug:
+      default: false
+      type: boolean
+    
+---
+image: gradle:alpine
+
+stages:
+  - build
+  - test
+  - scan
+  - deploy
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+      # If the pipeline is triggered by a merge request, use a "merge-request" named release and
+      # use the target branch name as the FoD release name
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+        EVENT: "Merge Request"
+        PARENT_RELEASE_NAME: ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
+        DEFAULT_RELEASE_NAME: MR-${CI_MERGE_REQUEST_TARGET_SOURCE_NAME}!${CI_MERGE_REQUEST_IID}
+      # If the pipeline is triggered by a push event, use the commit branch as the FoD release name
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      variables:
+        EVENT: "Push"
+        DEFAULT_RELEASE_NAME: $CI_COMMIT_BRANCH
+
+variables:
+  DEFAULT_APP_NAME: "IWA-Java"
+  DEFAULT_RELEASE_NAME: "main"
+  PARENT_RELEASE_MAIN: "main"
+
+include:
+  - component: $CI_SERVER_FQDN/Fortify/components/ast-scan/linux@main
+    inputs:
+      job-name: fortify-sast-scan # Optional job name used for running the AST scan, defaults to 'fortify-ast-scan'
+      stage: scan                 # Stage in which to run the AST scan, defaults to 'test'
+
+build:
+  stage: build
+  script: gradle --build-cache assemble
+  cache:
+    key: "$CI_COMMIT_REF_NAME"
+    policy: push
+    paths:
+      - build
+      - .gradle
+
+test:
+  stage: test
+  script: gradle check
+  cache:
+    key: "$CI_COMMIT_REF_NAME"
+    policy: pull
+    paths:
+      - build
+      - .gradle
+        
+fortify-sast-scan:                 # Needs to match the job name specified above
+  stage: scan
+  variables:                      # Specify AST scan configuration like SSC/FoD URL/credentials, tasks to execute, ...
+    FOD_URL: ${FOD_URL}           # See https://fortify.github.io/fcli/<fcli-version>/generic-actions.html#_ci for details
+    FOD_CLIENT_ID: ${FOD_CLIENT_ID}  
+    FOD_CLIENT_SECRET: ${FOD_CLIENT_SECRET}
+    FOD_RELEASE: "${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${DEFAULT_RELEASE_NAME}"
+    DO_SETUP: true
+    SETUP_EXTRA_OPTS: '--copy-from "${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${PARENT_RELEASE_NAME}" --use-aviator' # --oss
+    PACKAGE_EXTRA_OPTS: -oss
+    #PACKAGE_EXTRA_OPTS: --python-version 3 --python-virtual-env .ven --python-requirements requirements.txt
+    #USE_PACKAGE: myCustomPackage.zip
+    DO_JOB_SUMMARY: true
+    DO_CHECK_POLICY: false       # Set to true to check for policy violations and fail build if any are found
+    DO_PR_COMMENT: true
+    DO_EXPORT: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+deploy:
+  stage: deploy
+  script: echo "Define your deployment script!"
+  environment: production
+
