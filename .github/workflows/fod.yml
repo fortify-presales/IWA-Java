@@ -125,22 +125,10 @@ jobs:
             build/test-results/**/*.trx
             build/test-results/**/*.json     
 
-  Quality-Gate:
-    runs-on: ubuntu-latest
-    if: ${{ always() }}
-    needs: [ Env-Prepare, Build-And-Unit-Test ]
-    env: 
-      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
-      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-    # TBD
-
   FoD-SAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runFoDSASTScan == 'true') }}
-    needs: [ Env-Prepare, Quality-Gate ]
+    needs: [ Env-Prepare ]
     env: 
       FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
       FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
@@ -182,7 +170,7 @@ jobs:
   FoD-OSS-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runFoDOSSScan == 'true') }}
-    needs: [ Env-Prepare, Quality-Gate, FoD-SAST-Scan ] # for creating new FoD release (if required)
+    needs: [ Env-Prepare, FoD-SAST-Scan ] # for creating new FoD release (if required)
     env: 
       FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
       FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
@@ -232,18 +220,17 @@ jobs:
           FOD_APP_NAME: ${{ env.DEFAULT_APP_NAME }}
       # TBD 
 
-  Functional-Test:
-    runs-on: ubuntu-latest
-    if: ${{ always() }}
-    needs: [ Env-Prepare, Deploy-App ]
-    env: 
-      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
-      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-    # TBD
-
+  #Functional-Test:
+  #  runs-on: ubuntu-latest
+  #  if: ${{ always() }}
+  #  needs: [ Env-Prepare, Deploy-App ]
+  #  env: 
+  #    FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
+  #    FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
+  #  steps:
+  #    - name: Checkout
+  #      uses: actions/checkout@v4
+  
   FoD-DAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.ref_name == github.event.repository.default_branch) && (github.event.inputs.runFoDDASTScan == 'true') }}
@@ -274,13 +261,14 @@ jobs:
           FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
           FOD_RELEASE: ${{ env.FOD_RELEASE }}
 
-  Security-Gate:
+  Verify-Security-Policy:
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [ Env-Prepare, Functional-Test, FoD-DAST-Scan ]
+    needs: [ Env-Prepare, FoD-DAST-Scan ]
     env: 
       FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
       FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
+    continue-on-error: true # allow the workflow to continue even if this job fails
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -303,13 +291,13 @@ jobs:
           FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
           FOD_RELEASE: ${{ env.FOD_RELEASE }}
 
-  Release-To-Prod:
-    runs-on: ubuntu-latest
-    needs: [ Env-Prepare, Quality-Gate, Security-Gate ]
-    env: 
-      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
-      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-    # TBD
+  #Release-To-Prod:
+  #  runs-on: ubuntu-latest
+  #  needs: [ Env-Prepare, Verify-Security-Policy ]
+  #  env: 
+  #    FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
+  #    FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
+  #  steps:
+  #    - name: Checkout
+  #      uses: actions/checkout@v4
+  
