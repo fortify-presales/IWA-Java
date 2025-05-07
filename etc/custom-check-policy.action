@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://fortify.github.io/fcli/schemas/action/fcli-action-schema-2.0.0.json
+
+author: Fortify
+usage:
+  header: Check security policy. 
+  description: |
+    This action checks the outcome of the FoD Security Policy, returning a non-zero
+    exit code if FoD Security Policy status is Fail. Having this defined in an fcli
+    action allows for users to implement custom security policy checks through a
+    custom action, for example if they need more granuality than what's provided
+    by the standard FoD Security Policy.
+
+config:
+  rest.target.default: fod
+      
+cli.options:
+  release:
+    names: --release, --rel
+    description: "Required release id or <appName>:[<microserviceName>:]<releaseName>"
+  
+steps:
+  - var.set:
+      rel: ${#fod.release(cli.release)}
+  #- check:
+  #    fodSecurityPolicy:
+  #      display-name: FoD Security Policy must Pass
+  #      pass.if:      ${rel.isPassed}
+  - check:
+      fodCriticalPolicy:
+        display-name:   No Criticals
+        fail.if:       ${rel.critical > 100}
+  - check:
+      fodHighPolicy:
+        display-name:   Less than 10 Highs
+        fail.if:       ${rel.high > 100}
+      
+

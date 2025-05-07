@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://fortify.github.io/fcli/schemas/action/fcli-action-schema-2.1.0.json
+
+author: Fortify
+usage:
+  header: (PREVIEW) Generate GitLab annotations report. 
+  description: |
+    This action generates a GitLab annotations report containing annotations to attach 
+    auxiliary data to a job. Currently this action only adds an external_link to FoD
+    Release Issues page but could be customized for different links.
+
+config:
+  rest.target.default: fod
+
+cli.options:
+  fod-url:
+    names: --url, --fod-url
+    description: "FoD Portal URL. Default value: https://ams.fortify.com"
+    required: false
+    default: https://ams.fortify.com
+  release:
+    names: --release, --rel
+    description: "Required release id or <appName>:[<microserviceName>:]<releaseName>"
+  file:
+    names: --file, -f
+    description: "Optional output file name (or 'stdout' / 'stderr'). Default value: gl-fortify-annotations.json"
+    required: false
+    default: gl-fortify-annotations.json
+  
+steps:
+  - var.set:
+      r: ${#fod.release(cli.release)}
+      dateFmt: YYYY-MM-dd HH:mm
+  - out.write:
+      ${cli.file}: {fmt: annotations}
+  - if: ${!{'stdout','stderr'}.contains(cli.file)}
+    log.info: Output written to ${cli.file}
+
+formatters:
+  annotations: |
+      {
+        "fod_release_link": [
+          {
+            "external_link": {
+              "label": "Fortify on Demand Issues",
+              "url": "${cli['fod-url']}/Releases/${r.releaseId}/Issues"
+            }
+          }
+        ]
+      }
+
+

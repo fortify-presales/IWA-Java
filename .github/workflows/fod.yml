@@ -1,9 +1,8 @@
 
 # Create GitHub Action Repository Variables for your version of the application:
-#   FOD_BASE_URL                - FoD BASE URL for your tenant (e.g. https://ams.fortify.com)
+#   FOD_URL                     - FoD Portal URL for your tenant (e.g. https://ams.fortify.com)
 #   FOD_API_URL                 - FoD API URL for your tenant (e.g. https://api.ams,fortify.com)
-#   FORTIFY_APP_NAME_POSTFIX    - A postfix string to apply to the application to make it unique, set to empty to use DEFAULT_APP_NAME
-#   FOD_PARENT_RELEASE_NAME     - FoD release name corresponding to the parent branch of any newly created branch, this is typically "main" or "develop"
+#   FOD_APP_NAME_POSTFIX        - A postfix string to apply to the application to make it unique, set to empty to use DEFAULT_APP_NAME
 #   FOD_DEFAULT_OWNER           - The user id of the Application Owner (only needed if an application does not already exist)
 #   FOD_DEFAULT_ASSESSMENT_TYPE - The default Assessment Type to use, e.g. "Static Assessment"
 # Create GitHub Action Secrets for your version of the application:
@@ -21,6 +20,8 @@ on:
     paths-ignore:
       - '.github/**/**'
       - 'Jenkinsfile'
+      - '.gitlab-ci.yml'
+      - 'azure-pipelines.yml'
       - 'bin/**'
       - 'data/**'
       - 'etc/**'
@@ -58,18 +59,46 @@ on:
 # Global environment variables
 env:
   DEFAULT_APP_NAME: "IWA-Java"
+  DEFAULT_PARENT_RELEASE_NAME: "main"
   GRADLE_VERSION: "7.6.4"
   JAVA_VERSION: "17"
   BASE_DIR: "."
 
 jobs:
 
-  Build-And-Unit-Test:
-    # The type of runner that the job will run on
+  Env-Prepare:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set up environment variables
+        run: |
+          echo "JAVA_VERSION=${{ env.JAVA_VERSION }}" >> $GITHUB_ENV
+          echo "GRADLE_VERSION=${{ env.GRADLE_VERSION }}" >> $GITHUB_ENV
+          echo "BASE_DIR=${{ env.BASE_DIR }}" >> $GITHUB_ENV
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "Running in a pull request pipeline ..."
+            echo "FOD_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ env.FOD_APP_NAME_POSTFIX }}:merge-to-${{ github.base_ref }}#PR${{ github.event.number }}" >> $GITHUB_ENV
+            echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ env.FOD_APP_NAME_POSTFIX }}:${{ github.head_ref }}" >> $GITHUB_ENV
+          else
+            echo "Running in a branch pipeline ..."
+            echo "FOD_RELEASE=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+            echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ env.FOD_APP_NAME_POSTFIX }}:${{ env.DEFAULT_PARENT_RELEASE_NAME }}" >> $GITHUB_ENV
+          fi
+          
+  Build-And-Unit-Test:
+    runs-on: ubuntu-latest
+    needs: [ Env-Prepare ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check environment variables
+        run: |
+          echo "JAVA_VERSION=${{ env.JAVA_VERSION }}"
+          echo "GRADLE_VERSION=${{ env.GRADLE_VERSION }}"
+          echo "BASE_DIR=${{ env.BASE_DIR }}"
+          echo "FOD_RELEASE=${{ env.FOD_RELEASE }}"
+          echo "FOD_PARENT_RELEASE=${{ env.FOD_PARENT_RELEASE }}"
       # Setup JDK 17 on host
       - uses: actions/setup-java@v4
         with:
@@ -126,19 +155,19 @@ jobs:
       #  shell: bash
       #  run: |
       #    fcli --version
-      #    fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --session github-actions
+      #    fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session github-actions
       #    ./gradlew clean build -x test zip
-      #    fcli fod sast-scan start --release "${FOD_RELEASE}" -f $PACKAGE_FILE --store curScan --session github-actions
+      #    fcli fod sast-scan start --release "${FOD_RELEASE}" -f $PACKAGE_FILE --store curScan --fod-session github-actions
       #    sleep 10
       #    echo "fod_scan_id=$(fcli util var contents curScan -o 'expr={scanId}')" >> $GITHUB_OUTPUT
-      #    fcli fod sast-scan wait-for ::curScan:: --session github-actions
-      #    fcli fod session logout --session github-actions
+      #    fcli fod sast-scan wait-for ::curScan:: --fod-session github-actions
+      #    fcli fod session logout --fod-session github-actions
       #  env:
       #    FOD_API_URI: ${{ vars.FOD_API_URL }}
       #    FOD_CLIENT_ID: ${{ secrets.FOD_CLIENT_ID }}
       #    FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
       #    PACKAGE_FILE: "./build/distributions/iwa-1.0-src.zip"
-      #    FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
+      #    FOD_RELEASE: ${{ env.FOD_RELEASE }}
 
       #
       # See: https://github.com/marketplace/actions/fortify-ast-scan
@@ -156,29 +185,17 @@ jobs:
           FOD_CLIENT_ID: ${{secrets.FOD_CLIENT_ID}}
           FOD_CLIENT_SECRET: ${{secrets.FOD_CLIENT_SECRET}}
           # FOD_LOGIN_EXTRA_OPTS: --socket-timeout=60s
-          FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
+          #FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
+          FOD_RELEASE: ${{ env.FOD_RELEASE }}
           DO_SETUP: true
-          # SETUP_ACTION: https://scm.my.org/shared-repos/fcli-actions/setup.yaml
-          # SETUP_EXTRA_OPTS: --copy-from "${{ github.repository }}:${{ github.event.repository.default_branch }}"
-          SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}{1}:{2}" --sdlc-status Development --app-owner {3} --assessment-type "{4}"', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, vars.FORTIFY_PARENT_APPVER_NAME, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
-          #SC_CLIENT_VERSION: 24.4.1
-          #DO_PACKAGE_DEBUG: true
+          SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}" --sdlc-status Development --app-owner {1} --assessment-type "{2}"', env.FOD_RELEASE, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
           PACKAGE_EXTRA_OPTS: -bt gradle -bf build.gradle -bc "clean build -x test"
           # FOD_SAST_SCAN_EXTRA_OPTS:
           DO_WAIT: true
-          # DO_POLICY_CHECK: true
-          # POLICY_CHECK_ACTION: https://scm.my.org/shared-repos/fcli-actions/check-policy.yaml
-          # POLICY_CHECK_EXTRA_OPTS: --on-unsigned=ignore
+          DO_POLICY_CHECK: false
           DO_JOB_SUMMARY: true
-          # JOB_SUMMARY_ACTION: https://scm.my.org/shared-repos/fcli-actions/job-summary.yaml
-          # JOB_SUMMARY_EXTRA_OPTS: --on-unsigned=ignore
           DO_PR_COMMENT: true
-          # PR_COMMENT_ACTION: https://scm.my.org/shared-repos/fcli-actions/github-pr-comment.yaml
-          # PR_COMMENT_EXTRA_OPTS: --on-unsigned=ignore
           DO_EXPORT: true
-          # EXPORT_ACTION: https://scm.my.org/shared-repos/fcli-actions/github-sast-report.yaml
-          # EXPORT_EXTRA_OPTS: --on-unsigned=ignore
-          # TOOL_DEFINITIONS: https://ftfy.mycompany.com/tool-definitions/v1/tool-definitions.yaml.zip
 
   FoD-OSS-Scan:
     runs-on: ubuntu-latest
@@ -192,26 +209,25 @@ jobs:
           #tool-definitions: https://github.com/fortify/tool-definitions/releases/download/v1/tool-definitions.yaml.zip
           export-path: true
           fcli: latest
-          debricked-cli: 2.6.1 # change to latest
+          debricked-cli: latest
       - name: Perform FoD OSS Scan
         shell: bash
         run: |
-          fcli --version
-          fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --session github-actions
+          fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session github-actions
           rm -f $PACKAGE_FILE
           debricked resolve
           zip $PACKAGE_FILE gradle.debricked.lock debricked-config.yaml     
-          fcli fod oss-scan start --release "${FOD_RELEASE}" -f $PACKAGE_FILE --store curScan --session github-actions
+          fcli fod oss-scan start --release "${FOD_RELEASE}" -f $PACKAGE_FILE --store curScan --fod-session github-actions
           sleep 10
           echo "fod_scan_id=$(fcli util var contents curScan -o 'expr={scanId}')" >> $GITHUB_OUTPUT
-          fcli fod oss-scan wait-for ::curScan:: --session github-actions
-          fcli fod session logout --session github-actions
+          fcli fod oss-scan wait-for ::curScan:: --fod-session github-actions
+          fcli fod session logout --fod-session github-actions
         env:
           FOD_API_URI: ${{ vars.FOD_API_URL }}
           FOD_CLIENT_ID: ${{ secrets.FOD_CLIENT_ID }}
           FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
-          PACKAGE_FILE: "osspackage.zip"
-          FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
+          PACKAGE_FILE: "fortifypackage.zip"
+          FOD_RELEASE: ${{ env.FOD_RELEASE }}
 
   Deploy-App:
     runs-on: ubuntu-latest
@@ -223,7 +239,7 @@ jobs:
       - name: Deploy App
         shell: bash
         run: |
-          echo "Simulating deployment"
+          echo "Simulating deployment..."
         env:
           FOD_APP_NAME: ${{ env.DEFAULT_APP_NAME }}
       # TBD 
@@ -244,26 +260,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Fortify App and Release Name
-        id: fortify-app-and-rel-name
-        uses: fortify-presales/github-actions/fortify-app-and-release-name@main
+      - name: Setup Fortify tools
+        uses: fortify/github-action/setup@v1
         with:
-          default_fortify_app_name: ${{ env.DEFAULT_APP_NAME }}
-          default_fortify_release_name: ${{ github.ref_name }}
-          app_name_postfix: ${{ vars.FORTIFY_APP_NAME_POSTFIX }}
-      - name: FoD DAST scan
-        id: fod-dast-scan
-        uses: fortify-presales/github-actions/fod-dast-scan@main
-        with:
-          working_directory: ${{ env.BASE_DIR }}
-          fod_url: ${{ vars.FOD_URL }}
-          fod_api_url: ${{ vars.FOD_API_URL }}
-          fod_client_id: ${{ secrets.FOD_CLIENT_ID }}
-          fod_client_secret: ${{ secrets.FOD_CLIENT_SECRET }}
-          fod_app_name: ${{ format('{0}{1}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX) }}
-          fod_release_name: ${{ github.ref_name }}
-          #fod_release_name: ${{ format('{0}#{1}', steps.fortify-app-and-rel-name.outputs.release_name, github.run_number) }}
-          #fod_parent_release_name: ${{ steps.fortify-app-and-rel-name.outputs.parent_release_name }}
+          #tool-definitions: https://github.com/fortify/tool-definitions/releases/download/v1/tool-definitions.yaml.zip
+          export-path: true
+          fcli: latest
+      - name: Check FoD Release
+        shell: bash
+        run: |
+          fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session github-actions
+          fcli fod dast-scan start --release "${FOD_RELEASE}" --store curScan --fod-session github-actions
+          sleep 10
+          fcli fod dast-scan wait-for ::curScan:: --fod-session github-actions
+          fcli fod session logout --fod-session github-actions
+        env:
+          FOD_API_URI: ${{ vars.FOD_API_URL }}
+          FOD_CLIENT_ID: ${{ secrets.FOD_CLIENT_ID }}
+          FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
+          FOD_RELEASE: ${{ env.FOD_RELEASE }}
 
   Security-Gate:
     runs-on: ubuntu-latest
@@ -272,21 +287,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Fortify App and Release Name
-        id: fortify-app-and-rel-name
-        uses: fortify-presales/github-actions/fortify-app-and-release-name@main
+      - name: Setup Fortify tools
+        uses: fortify/github-action/setup@v1
         with:
-          default_fortify_app_name: ${{ env.DEFAULT_APP_NAME }}
-          default_fortify_release_name: ${{ github.ref_name }}
-          app_name_postfix: ${{ vars.FORTIFY_APP_NAME_POSTFIX }}
-      - name: Verify FoD Security Policy
-        uses: fortify-presales/github-actions/verify-fod-security-policy@main
-        with:
-          fod_api_url: ${{ vars.FOD_API_URL }}
-          fod_client_id: ${{ secrets.FOD_CLIENT_ID }}
-          fod_client_secret: ${{ secrets.FOD_CLIENT_SECRET }}
-          fod_app_name: ${{ steps.fortify-app-and-rel-name.outputs.app_name }}
-          fod_release_name: ${{ steps.fortify-app-and-rel-name.outputs.release_name }}
+          #tool-definitions: https://github.com/fortify/tool-definitions/releases/download/v1/tool-definitions.yaml.zip
+          export-path: true
+          fcli: latest
+      - name: Check FoD Release
+        shell: bash
+        run: |
+          fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session github-actions
+          fcli fod action run release-summary --release "${FOD_RELEASE}" --fod-session github-actions >> $GITHUB_STEP_SUMMARY
+          fcli fod action run etc/custom-check-policy.action --on-unsigned=ignore --release "${FOD_RELEASE}" --fod-session github-actions
+          fcli fod session logout --fod-session github-actions
+        env:
+          FOD_API_URI: ${{ vars.FOD_API_URL }}
+          FOD_CLIENT_ID: ${{ secrets.FOD_CLIENT_ID }}
+          FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
+          FOD_RELEASE: ${{ env.FOD_RELEASE }}
 
   Release-To-Prod:
     runs-on: ubuntu-latest

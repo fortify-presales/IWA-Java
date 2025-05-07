@@ -1,0 +1,41 @@
+ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+PROJECT := unknown
+PROJECTS := $(shell ls . | grep project)
+VERSION ?= $(shell git describe --tags --always --dirty --match=v* 2> /dev/null || echo "1.0.0")
+COMMIT := $(shell git log -1 --pretty=format:"%H")
+
+SAST_TRANSLATE_OPTS := -verbose -debug .
+SAST_SCAN_OPTS := -verbose -debug
+
+-include $(ROOT_DIR)/fortify.env
+
+.PHONY: default
+default: help
+
+# generate help info from comments
+.PHONY: help
+help: ## help information about make commands
+	@grep -h -P '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+.PHONY: version
+version: ## display the version of the service
+	@echo $(VERSION)
+
+.PHONY: sast-scan
+sast-scan: build ## run OpenText static application security testing
+	@echo "Running OpenText static application security testing..."
+	@sourceanalyzer "-Dcom.fortify.sca.ProjectRoot=.fortify" -b "$(PROJECT)" -clean
+	@sourceanalyzer "-Dcom.fortify.sca.ProjectRoot=.fortify" -b "$(PROJECT)" $(SAST_TRANSLATE_OPTS)
+	@sourceanalyzer "-Dcom.fortify.sca.ProjectRoot=.fortify" -b "$(PROJECT)" $(SAST_SCAN_OPTS) -scan \
+		-rules $(ROOT_DIR)/etc/sast-custom-rules/example-custom-rules.xml \
+		-filter $(ROOT_DIR)/etc/sast-filters/example-filter.txt \
+		-build-project "$(PROJECT)" -build-version "$(VERSION)" -build-label "SNAPSHOT" \
+		-f "$(PROJECT).fpr"
+	@FPRUtility -information -analyzerIssueCounts -project "$(PROJECT).fpr"
+
+.PHONY: sca-scan
+sca-scan: ## run OpenText software composition analysis
+	@echo "Running OpenText software composition analysis..."
+	@debricked scan . -r $(PROJECT) -c $(COMMIT) -t $(DEBRICKED_TOKEN)
+
+

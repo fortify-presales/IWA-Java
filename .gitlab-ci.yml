@@ -1,3 +1,16 @@
+#
+# An example GitLab CI/CD pipeline configuration file for a gradle application
+# that includes build, test, deploy, and Fortify SAST/DAST scans.
+# This pipeline uses the Fortify fcli tool and GitLab CI/CD features.
+#
+# To use set the following variables in your GitLab project:
+#   - FOD_URL: Fortify on Demand URL (e.g., https://ams.fortify.com)
+#   - FOD_API_URL: Fortify API URL (e.g., https://api.ams.fortify.com)
+#   - FOD_CLIENT_ID: Fortify on Demand Client ID
+#   - FOD_CLIENT_SECRET: Fortify on Demand Client Secret
+#   - FOD_APP_NAME_POSTFIX: Optional postfix for the application name
+#   - FOD_PARENT_RELEASE_NAME: Optional parent release name for new releases that are created
+
 spec:
   inputs:
     debug:
@@ -5,88 +18,249 @@ spec:
       type: boolean
     
 ---
-image: gradle:alpine
+
+image: gradle:7.6.4-jdk17    # default image to use for the pipeline
 
 stages:
   - build
   - test
-  - scan
   - deploy
+  - scan
 
 workflow:
   rules:
+    # Only run the pipeline for merge requests and pushes to branches (not both when a merge request is open)
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
     - if: $CI_COMMIT_BRANCH
-      # If the pipeline is triggered by a merge request, use a "merge-request" named release and
-      # use the target branch name as the FoD release name
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      variables:
-        EVENT: "Merge Request"
-        PARENT_RELEASE_NAME: ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
-        DEFAULT_RELEASE_NAME: MR-${CI_MERGE_REQUEST_TARGET_SOURCE_NAME}!${CI_MERGE_REQUEST_IID}
-      # If the pipeline is triggered by a push event, use the commit branch as the FoD release name
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-      variables:
-        EVENT: "Push"
-        DEFAULT_RELEASE_NAME: $CI_COMMIT_BRANCH
 
 variables:
   DEFAULT_APP_NAME: "IWA-Java"
-  DEFAULT_RELEASE_NAME: "main"
-  PARENT_RELEASE_MAIN: "main"
+  DEFAULT_PARENT_RELEASE_NAME: "main"
+  DEFAULT_RELEASE_NAME: "${CI_COMMIT_BRANCH}"
 
 include:
+  - component: $CI_SERVER_FQDN/Fortify/components/fcli/linux@dev/v2.x
+    inputs:
+      stage: scan                # Stage in which to run the fcli commands
   - component: $CI_SERVER_FQDN/Fortify/components/ast-scan/linux@main
     inputs:
       job-name: fortify-sast-scan # Optional job name used for running the AST scan, defaults to 'fortify-ast-scan'
       stage: scan                 # Stage in which to run the AST scan, defaults to 'test'
 
-build:
-  stage: build
-  script: gradle --build-cache assemble
-  cache:
-    key: "$CI_COMMIT_REF_NAME"
-    policy: push
-    paths:
-      - build
-      - .gradle
-
-test:
-  stage: test
-  script: gradle check
-  cache:
-    key: "$CI_COMMIT_REF_NAME"
-    policy: pull
-    paths:
-      - build
-      - .gradle
-        
-fortify-sast-scan:                 # Needs to match the job name specified above
+# set fcli job to never run as it will be extended by other jobs below
+fcli:
   stage: scan
+  rules:
+    - when: never
+
+env-prepare:
+  stage: build
+  script: |
+    if [[ $CI_MERGE_REQUEST_ID != "" ]]; then
+        echo "Running in a merge request pipeline ..."
+        echo "FOD_RELEASE=${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:merge-to-${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}!MR${CI_MERGE_REQUEST_IID}" >> build.env
+        echo "FOD_PARENT_RELEASE=${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME}" >> build.env
+    else
+        echo "Running in a branch pipeline ..."
+        echo "FOD_RELEASE=${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${CI_COMMIT_BRANCH}" >> build.env
+        echo "FOD_PARENT_RELEASE=${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${DEFAULT_PARENT_RELEASE_NAME}" >> build.env
+    fi
+    echo "Created build.env with the following contents:"
+    cat build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+
+# This is a sample job to build the application. You can replace it with your actual build job.
+gradle-build:
+  stage: build
+  script:
+    - echo "Building the application..."
+    - ./gradlew clean build
+
+# This is a sample job to test a gradle application using pytest. You can replace it with your actual test job.
+gradle-test:
+  stage: test
+  script:
+    - ./gradlew test
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: build/test-results/test/**/TEST-*.xml
+
+# This is a sample job to deploy the application. You can replace it with your actual deploy job.
+gradle-deploy:
+  stage: deploy
+  script:
+    - echo "Deploying the application..."
+
+fortify-sast-scan:                # Needs to match the job name specified above
+  stage: scan
+  needs: 
+    - job: gradle-test
+    - job: fortify-sast-scan-prepare
+    - job: env-prepare
+      artifacts: true
+  before_script: |
+    echo "FOD_RELEASE=${FOD_RELEASE}"
+    echo "FOD_PARENT_RELEASE=${FOD_PARENT_RELEASE}"
   variables:                      # Specify AST scan configuration like SSC/FoD URL/credentials, tasks to execute, ...
     FOD_URL: ${FOD_URL}           # See https://fortify.github.io/fcli/<fcli-version>/generic-actions.html#_ci for details
     FOD_CLIENT_ID: ${FOD_CLIENT_ID}  
     FOD_CLIENT_SECRET: ${FOD_CLIENT_SECRET}
-    FOD_RELEASE: "${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${DEFAULT_RELEASE_NAME}"
+    #FOD_RELEASE: "${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${DEFAULT_RELEASE_NAME}"
     DO_SETUP: true
-    SETUP_EXTRA_OPTS: '--copy-from "${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${PARENT_RELEASE_NAME}" --use-aviator' # --oss
+    SETUP_EXTRA_OPTS: '--copy-from "${FOD_PARENT_RELEASE}" --use-aviator' # --oss
     PACKAGE_EXTRA_OPTS: -oss
-    #PACKAGE_EXTRA_OPTS: --python-version 3 --python-virtual-env .ven --python-requirements requirements.txt
     #USE_PACKAGE: myCustomPackage.zip
     DO_JOB_SUMMARY: true
     DO_CHECK_POLICY: false       # Set to true to check for policy violations and fail build if any are found
     DO_PR_COMMENT: true
     DO_EXPORT: true
+
+#An example of a job that runs the Fortify SAST scan using the fcli tool
+#fortify-sast-scan:                # Needs to match the job name specified above
+#  extends: fcli
+#  stage: scan
+#  needs: 
+#      - job: gradle-test
+#      - job: fcli-prepare
+#      - job: env-prepare
+#        artifacts: true
+#  before_script: |
+#    echo "FOD_RELEASE=${FOD_RELEASE}"
+#    echo "FOD_PARENT_RELEASE=${FOD_PARENT_RELEASE}"
+#  script:
+#    - ${FCLI} action run ci
+#  variables:
+#    FOD_URL: ${FOD_URL}           # See https://fortify.github.io/fcli/<fcli-version>/generic-actions.html#_ci for details
+#    FOD_CLIENT_ID: ${FOD_CLIENT_ID}  
+#    FOD_CLIENT_SECRET: ${FOD_CLIENT_SECRET}
+#    #FOD_RELEASE: "${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${DEFAULT_RELEASE_NAME}"
+#    DO_SETUP: true
+#    SETUP_EXTRA_OPTS: '--copy-from "${FOD_PARENT_RELEASE}" --use-aviator' # --oss
+#    PACKAGE_EXTRA_OPTS: -oss
+#    #USE_PACKAGE: myCustomPackage.zip
+#    DO_JOB_SUMMARY: true
+#    DO_CHECK_POLICY: false       # Set to true to check for policy violations and fail build if any are found
+#    DO_PR_COMMENT: true
+#    DO_EXPORT: true
+#  artifacts:
+#    reports:
+#      sast: gl-fortify-sast.json
+#    paths: [ gl-fortify-sast.json ]
+#  rules:
+#    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+#    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+#      when: never
+#    - if: $CI_COMMIT_BRANCH
+
+fortify-sca-scan:
+  extends: fcli
+  stage: scan
+  needs: 
+    - job: gradle-build
+    - job: fcli-prepare
+    - job: env-prepare
+      artifacts: true
+    - job: fortify-sast-scan # for creating new FoD release (if required)
+  before_script: |
+    echo "FOD_RELEASE=${FOD_RELEASE}"
+    echo "FOD_PARENT_RELEASE=${FOD_PARENT_RELEASE}"
+  script: |
+    ${FCLI} tool debricked-cli install
+    ${FCLI} tool debricked-cli run resolve
+    ${FCLI} fod session login --url $FOD_API_URL --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session gitlab
+    rm -f $PACKAGE_FILE
+    ${FCLI} tool debricked-cli run resolve
+    jar -cf $PACKAGE_FILE gradle.debricked.lock debricked-config.yaml
+    ${FCLI} fod oss-scan start --release "${FOD_RELEASE}" -f $PACKAGE_FILE --store curScan --fod-session gitlab
+    sleep 10
+    ${FCLI} fod oss-scan wait-for ::curScan:: --fod-session gitlab
+    ${FCLI} fod session logout --fod-session gitlab
+  variables:
+    PACKAGE_FILE: "fortifypackage.zip"
+    FOD_API_URL: ${FOD_API_URL}           # Fortify API URL, e.g. https://api.ams.fortify.com
+    FOD_CLIENT_ID: ${FOD_CLIENT_ID}  
+    FOD_CLIENT_SECRET: ${FOD_CLIENT_SECRET}
+    #FOD_RELEASE: "${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${DEFAULT_RELEASE_NAME}"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
     - if: $CI_COMMIT_BRANCH
 
-deploy:
-  stage: deploy
-  script: echo "Define your deployment script!"
-  environment: production
+fortify-dast-scan:
+  extends: fcli
+  stage: scan
+  needs: 
+    - job: gradle-deploy
+    - job: fcli-prepare
+    - job: env-prepare
+      artifacts: true
+    #- job: fortify-sast-scan # for creating new FoD release (if required)
+  before_script: |
+    echo "FOD_RELEASE=${FOD_RELEASE}"
+    echo "FOD_PARENT_RELEASE=${FOD_PARENT_RELEASE}"
+  script: |
+    ${FCLI} fod session login --url $FOD_API_URL --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session gitlab
+    ${FCLI} fod dast-scan start --release "${FOD_RELEASE}" --store curScan --fod-session gitlab
+    sleep 10
+    ${FCLI} fod dast-scan wait-for ::curScan:: --fod-session gitlab
+    ${FCLI} fod session logout --fod-session gitlab
+  variables:
+    FOD_API_URL: ${FOD_API_URL}           # Fortify API URL, e.g. https://api.ams.fortify.com
+    FOD_CLIENT_ID: ${FOD_CLIENT_ID}  
+    FOD_CLIENT_SECRET: ${FOD_CLIENT_SECRET}
+    #FOD_RELEASE: "${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${DEFAULT_RELEASE_NAME}"
+  artifacts:
+    reports:
+      dast: gl-fortify-dast.json
+    paths: [ gl-fortify-dast.json ]
+  rules:
+    # Only run DAST scan on a schedule
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: on_success
 
+fortify-security-gate:
+  extends: fcli
+  stage: scan
+  needs:
+    - job: fortify-sca-scan
+    - job: fortify-sast-scan
+    - job: fortify-dast-scan
+      optional: true
+    - job: fcli-prepare
+    - job: env-prepare
+      artifacts: true
+  before_script: |
+    echo "FOD_RELEASE=${FOD_RELEASE}"
+    echo "FOD_PARENT_RELEASE=${FOD_PARENT_RELEASE}"
+  script: |
+    ${FCLI} fod session login --url $FOD_API_URL --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session gitlab
+    ${FCLI} fod action run etc/gitlab-fod-annotations.action --on-unsigned=ignore --release "${FOD_RELEASE}" --url "${FOD_URL}" --fod-session gitlab
+    ${FCLI} fod action run etc/gitlab-codequality-report.action --on-unsigned=ignore --release "${FOD_RELEASE}" --fod-session gitlab
+    ${FCLI} fod action run etc/custom-check-policy.action --on-unsigned=ignore --release "${FOD_RELEASE}" --fod-session gitlab
+    ${FCLI} fod session logout --fod-session gitlab
+  variables:
+    FOD_URL: ${FOD_URL}
+    FOD_API_URL: ${FOD_API_URL}
+    FOD_CLIENT_ID: ${FOD_CLIENT_ID}  
+    FOD_CLIENT_SECRET: ${FOD_CLIENT_SECRET}
+    #FOD_RELEASE: "${DEFAULT_APP_NAME}${FOD_APP_NAME_POSTFIX}:${DEFAULT_RELEASE_NAME}"
+  artifacts:
+      reports:
+        annotations:  'gl-fortify-annotations.json'
+        codequality:  'gl-fortify-codequality.json'
+      expose_as: 'Release Summary'
+      paths: [ 'release-summary.md' ]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+    # when: always
+  allow_failure: true
