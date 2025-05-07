@@ -41,7 +41,7 @@
                                 <h1 class="display-4">Hello, <span th:text="${fullname}"></span></h1>
                                 <p class="lead">
                                     Welcome back to IWA Pharmacy Direct. This is your home page where you can check the status of your orders,
-                                    view any messages and update your profile.</p>
+                                    view any messages and update your <a th:href="@{/user/xss}">profile</a>.</p>
                                 <hr class="my-4">
 
                                 <div class="col-md-12">
