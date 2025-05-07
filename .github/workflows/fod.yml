@@ -68,27 +68,31 @@ jobs:
 
   Env-Prepare:
     runs-on: ubuntu-latest
+    outputs:
+      FOD_RELEASE: ${{ steps.commands.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ steps.commands.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up environment variables
+        id: commands
         run: |
-          echo "JAVA_VERSION=${{ env.JAVA_VERSION }}" >> $GITHUB_ENV
-          echo "GRADLE_VERSION=${{ env.GRADLE_VERSION }}" >> $GITHUB_ENV
-          echo "BASE_DIR=${{ env.BASE_DIR }}" >> $GITHUB_ENV
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "Running in a pull request pipeline ..."
-            echo "FOD_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ env.FOD_APP_NAME_POSTFIX }}:merge-to-${{ github.base_ref }}#PR${{ github.event.number }}" >> $GITHUB_ENV
-            echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ env.FOD_APP_NAME_POSTFIX }}:${{ github.head_ref }}" >> $GITHUB_ENV
+            echo "FOD_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ vars.FOD_APP_NAME_POSTFIX }}:merge-to-${{ github.base_ref }}#PR${{ github.event.number }}" >> $GITHUB_OUTPUT
+            echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ vars.FOD_APP_NAME_POSTFIX }}:${{ github.head_ref }}" >> $GITHUB_OUTPUT
           else
             echo "Running in a branch pipeline ..."
-            echo "FOD_RELEASE=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
-            echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ env.FOD_APP_NAME_POSTFIX }}:${{ env.DEFAULT_PARENT_RELEASE_NAME }}" >> $GITHUB_ENV
+            echo "FOD_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ vars.FOD_APP_NAME_POSTFIX }}:${{ github.head_ref }}" >> $GITHUB_OUTPUT
+            echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ vars.FOD_APP_NAME_POSTFIX }}:${{ env.DEFAULT_PARENT_RELEASE_NAME }}" >> $GITHUB_OUTPUT
           fi
           
   Build-And-Unit-Test:
     runs-on: ubuntu-latest
     needs: [ Env-Prepare ]
+    env: 
+      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -124,7 +128,10 @@ jobs:
   Quality-Gate:
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [ Build-And-Unit-Test ]
+    needs: [ Env-Prepare, Build-And-Unit-Test ]
+    env: 
+      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -133,6 +140,10 @@ jobs:
   FoD-SAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runFoDSASTScan == 'true') }}
+    needs: [ Env-Prepare, Quality-Gate ]
+    env: 
+      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -141,34 +152,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
-
-      # Manually package source and libs
-      #- name: Package Source and Libs
-      #  run: ./gradlew clean build -x test zip
-      #- name: Setup Fortify tools
-      #  uses: fortify/github-action/setup@v1
-      #  with:
-      #    #tool-definitions: https://github.com/fortify/tool-definitions/releases/download/v1/tool-definitions.yaml.zip
-      #    export-path: true
-      #    fcli: latest
-      #- name: Perform FoD SAST Scan
-      #  shell: bash
-      #  run: |
-      #    fcli --version
-      #    fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session github-actions
-      #    ./gradlew clean build -x test zip
-      #    fcli fod sast-scan start --release "${FOD_RELEASE}" -f $PACKAGE_FILE --store curScan --fod-session github-actions
-      #    sleep 10
-      #    echo "fod_scan_id=$(fcli util var contents curScan -o 'expr={scanId}')" >> $GITHUB_OUTPUT
-      #    fcli fod sast-scan wait-for ::curScan:: --fod-session github-actions
-      #    fcli fod session logout --fod-session github-actions
-      #  env:
-      #    FOD_API_URI: ${{ vars.FOD_API_URL }}
-      #    FOD_CLIENT_ID: ${{ secrets.FOD_CLIENT_ID }}
-      #    FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
-      #    PACKAGE_FILE: "./build/distributions/iwa-1.0-src.zip"
-      #    FOD_RELEASE: ${{ env.FOD_RELEASE }}
-
       #
       # See: https://github.com/marketplace/actions/fortify-ast-scan
       #
@@ -186,9 +169,8 @@ jobs:
           FOD_CLIENT_SECRET: ${{secrets.FOD_CLIENT_SECRET}}
           # FOD_LOGIN_EXTRA_OPTS: --socket-timeout=60s
           #FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
-          FOD_RELEASE: ${{ env.FOD_RELEASE }}
           DO_SETUP: true
-          SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}" --sdlc-status Development --app-owner {1} --assessment-type "{2}"', env.FOD_RELEASE, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
+          SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}" --sdlc-status Development --app-owner {1} --assessment-type "{2}"', env.FOD_PARENT_RELEASE, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
           PACKAGE_EXTRA_OPTS: -bt gradle -bf build.gradle -bc "clean build -x test"
           # FOD_SAST_SCAN_EXTRA_OPTS:
           DO_WAIT: true
@@ -200,6 +182,10 @@ jobs:
   FoD-OSS-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runFoDOSSScan == 'true') }}
+    needs: [ Env-Prepare, Quality-Gate, FoD-SAST-Scan ] # for creating new FoD release (if required)
+    env: 
+      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -227,12 +213,14 @@ jobs:
           FOD_CLIENT_ID: ${{ secrets.FOD_CLIENT_ID }}
           FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
           PACKAGE_FILE: "fortifypackage.zip"
-          FOD_RELEASE: ${{ env.FOD_RELEASE }}
 
   Deploy-App:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.deployApp == 'true') }}
-    needs: [ Build-And-Unit-Test, FoD-SAST-Scan, FoD-OSS-Scan ]
+    needs: [ Env-Prepare, Build-And-Unit-Test, FoD-SAST-Scan, FoD-OSS-Scan ]
+    env: 
+      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }} 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -247,7 +235,10 @@ jobs:
   Functional-Test:
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [ Deploy-App ]
+    needs: [ Env-Prepare, Deploy-App ]
+    env: 
+      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -256,7 +247,10 @@ jobs:
   FoD-DAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.ref_name == github.event.repository.default_branch) && (github.event.inputs.runFoDDASTScan == 'true') }}
-    needs: [ Deploy-App ]
+    needs: [ Env-Prepare, Deploy-App ]
+    env: 
+      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -283,7 +277,10 @@ jobs:
   Security-Gate:
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [ Functional-Test, FoD-DAST-Scan ]
+    needs: [ Env-Prepare, Functional-Test, FoD-DAST-Scan ]
+    env: 
+      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -308,7 +305,10 @@ jobs:
 
   Release-To-Prod:
     runs-on: ubuntu-latest
-    needs: [ Quality-Gate, Security-Gate ]
+    needs: [ Env-Prepare, Quality-Gate, Security-Gate ]
+    env: 
+      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
