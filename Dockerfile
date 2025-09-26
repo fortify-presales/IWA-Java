@@ -1,4 +1,4 @@
-FROM openjdk:11-jdk-slim
+FROM eclipse-temurin:17
 # A JDK 1.8 is needed if the WebInspect Runtime Agent is being used
 #FROM openjdk:8u342-jdk-slim
 
