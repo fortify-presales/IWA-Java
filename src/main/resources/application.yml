@@ -7,18 +7,18 @@ server:
     include-exception: false
     whitelabel:
       enabled: false
-  servlet:
-    context-path: /
   tomcat:
     relaxed-query-chars: ['{','}']
 
 spring:
-  config:
-    activate:
-      on-profile: "default"
+  #config:
+  #  activate:
+  #    on-profile: "default"
   main:
     allow-bean-definition-overriding: true
     banner-mode: "off"
+  servlet:
+    context-path: /
   thymeleaf:
     cache: false
     check-template: true
@@ -63,19 +63,22 @@ spring:
       WRITE_DATES_AS_TIMESTAMPS: false
   mail:
     default-encoding: UTF-8
-    host: smtp.sendgrid.net
-    username: apikey
-    password: # Your API Password
+    host: smtp.gmail.com
+    username: # YOUR_USER_NAME
+    password: # YOUR_APP_PASSWORD
     port: 587
     test-connection: true
-    debug: true
+    debug: false
     properties:
       mail:
         smtp:
           auth: true
           starttls:
             enable: true   
-
+  jwt:
+    secret: eLgvVuw3qIHLNGNH/XNASMiV1RQlVgNakeDsLu7svKQP7jtu2+35wwu/rfwBAQi88wCiuCU66NS66BEySj6jQ4tLOJy4Jn5USbjBk98vMYnT+3me2lYqTUg/tdEg2HHMzhnu+MOXdq5LK1iwr0/uTob/meDy2cIT3ljF+8L7ZuxnwYYW0BTQsM+0nDTYNg4Ik/ChORRBjDyNpplzGvJlqvY5g2RkCyIP0WRe1A==
+    expiration-ms: 86400000
+    refresh-ms: 86400000
 
 #  resources:
 #    add-mappings: false
@@ -119,10 +122,6 @@ app:
     page-size: 25
   messages:
     home: Welcome to our site!
-  jwt:
-    secret: eLgvVuw3qIHLNGNH/XNASMiV1RQlVgNakeDsLu7svKQP7jtu2+35wwu/rfwBAQi88wCiuCU66NS66BEySj6jQ4tLOJy4Jn5USbjBk98vMYnT+3me2lYqTUg/tdEg2HHMzhnu+MOXdq5LK1iwr0/uTob/meDy2cIT3ljF+8L7ZuxnwYYW0BTQsM+0nDTYNg4Ik/ChORRBjDyNpplzGvJlqvY5g2RkCyIP0WRe1A==
-    expiration-ms: 86400000
-    refresh-ms: 86400000
   mail:
     from-address: do-not-reply@onfortify.com
     from-name: IWAPharmacyDirect

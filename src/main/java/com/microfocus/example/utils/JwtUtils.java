@@ -40,13 +40,13 @@ import javax.servlet.http.HttpSession;
 public class JwtUtils {
     private static final Logger log = LoggerFactory.getLogger(JwtUtils.class);
 
-    @Value("${app.jwt.secret}")
+    @Value("${spring.jwt.secret:eLgvVuw3qIHLNGNH/XNASMiV1RQlVgNakeDsLu7svKQP7jtu2+35wwu/rfwBAQi88wCiuCU66NS66BEySj6jQ4tLOJy4Jn5USbjBk98vMYnT+3me2lYqTUg/tdEg2HHMzhnu+MOXdq5LK1iwr0/uTob/meDy2cIT3ljF+8L7ZuxnwYYW0BTQsM+0nDTYNg4Ik/ChORRBjDyNpplzGvJlqvY5g2RkCyIP0WRe1A==}")
     private String jwtSecret;
 
-    @Value("#{new Integer(${app.jwt.expiration-ms:0})}")
+    @Value("#{new Integer(${spring.jwt.expiration-ms:0})}")
     private int jwtExpirationMs;
 
-    @Value("#{new Integer(${app.jwt.refresh-ms:0})}")
+    @Value("#{new Integer(${spring.jwt.refresh-ms:0})}")
     private int jwtRefreshMs;
 
     public String generateJwtToken(Authentication authentication) {

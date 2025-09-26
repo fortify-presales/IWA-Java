@@ -42,7 +42,7 @@ public class FaviconConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(FaviconConfiguration.class);
 
-    @Value("${server.servlet.context-path}")
+    @Value("${spring.servlet.context-path}")
     private String contextPath;
 
     @Bean("CustomFaviconHandlerMapping")

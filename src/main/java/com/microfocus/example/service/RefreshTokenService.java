@@ -45,7 +45,7 @@ public class RefreshTokenService {
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final String SERVICE_NAME = getClass().getName();
 
-    @Value("${app.jwt.refresh-ms}")
+    @Value("#{new Integer(${spring.jwt.refresh-ms:0})}")
     private int jwtRefreshMs;
 
     @Autowired

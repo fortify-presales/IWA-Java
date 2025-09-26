@@ -220,6 +220,18 @@ SCANCENTRAL_EMAIL=test@test.com
 
 The `SSC_AUTH_TOKEN` entry should be set to the value of a 'CIToken' created in SSC _"Administration->Token Management"_.
 
+### AI Remediation using Fortify Aviator
+
+To audit the results in SSC using Fortify Aviator, you can use the following commands.
+
+```
+fcli aviator session login -t env:AVIATOR_TOKEN --url https://ams.aviator.fortify.com
+fcli ssc session login
+fcli aviator ssc audit --app YOUR_APP --av YOUR_APP:YOUR_RELEASE
+```
+
+Note: you will need to have a Fortify Aviator entitlement and have created and configured `YOUR_APP` in your tenant first.
+
 ### SAST using Fortify on Demand
 
 To execute a [Fortify on Demand](https://www.microfocus.com/en-us/products/application-security-testing/overview) SAST scan
