@@ -46,8 +46,6 @@ and requesting Services (prescriptions, health checks etc). It has a modern-ish 
 
 ![Screenshot](media/screenshot.png)
 
-An up-to-date version of the running application can be found at [https://iwa.onfortify.com](https://iwa.onfortify.com).
-
 ## Forking the Repository
 
 In order to execute example scenarios for yourself, it is recommended that you "fork" a copy of this repository into
