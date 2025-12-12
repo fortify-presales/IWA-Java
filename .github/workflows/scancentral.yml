@@ -114,10 +114,10 @@ jobs:
       #  shell: bash
       #  run: |
       #    echo "SSC App Name: ${SSC_APP_NAME}"
-      #    echo "SSC App Version Name: ${SSC_APPVER_NAME}"
+      #    echo "SSC App Version Name: ${SSC_APP_VERSION_NAME}"
       #  env:
       #    SSC_APP_NAME: ${{ steps.fortify-app-and-rel-name.outputs.app_name }}
-      #    SSC_APPVER_NAME: ${{ steps.fortify-app-and-rel-name.outputs.release_name }}      
+      #    SSC_APP_VERSION_NAME: ${{ steps.fortify-app-and-rel-name.outputs.release_name }}
 
       #
       # See: https://github.com/marketplace/actions/fortify-ast-scan

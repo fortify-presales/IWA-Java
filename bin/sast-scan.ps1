@@ -19,7 +19,7 @@ Import-Module $PSScriptRoot\modules\FortifyFunctions.psm1
 # Import local environment specific settings
 $EnvSettings = $(ConvertFrom-StringData -StringData (Get-Content ".\.env" | Where-Object {-not ($_.StartsWith('#'))} | Out-String))
 $AppName = $EnvSettings['SSC_APP_NAME']
-$AppVersion = $EnvSettings['SSC_APPVER_NAME']
+$AppVersion = $EnvSettings['SSC_APP_VERSION_NAME']
 $SSCUrl = $EnvSettings['SSC_URL']
 $SSCAuthToken = $EnvSettings['SSC_CI_TOKEN'] # CIToken
 $JVMArgs = "-Xss256M"

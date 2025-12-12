@@ -118,7 +118,7 @@ function Exec-Checked {
 try {
     if (-not $SkipEnvLoad) { Load-DotEnv -Path $EnvFile }
 
-    $required = @('SSC_URL','SSC_CI_TOKEN','SSC_CLIENT_AUTH_TOKEN','SSC_SENSOR_VER','SSC_APP_NAME','SSC_APPVER_NAME')
+    $required = @('SSC_URL','SSC_CI_TOKEN','SSC_CLIENT_AUTH_TOKEN','SSC_SENSOR_VER','SSC_APP_NAME','SSC_APP_VERSION_NAME')
     $missing = @()
     foreach ($r in $required) {
         if ([string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($r))) { $missing += $r }
@@ -192,7 +192,7 @@ try {
         }
 
         # Start SAST scan
-        $publishTo = "$($env:SSC_APP_NAME):$($env:SSC_APPVER_NAME)"
+        $publishTo = "$($env:SSC_APP_NAME):$($env:SSC_APP_VERSION_NAME)"
         Exec-Checked -Command 'fcli' -Args @('sc-sast','scan','start','--sensor-version',$env:SSC_SENSOR_VER,'-f','Package.zip','--publish-to',$publishTo,'--store','curScan','--ssc-session','fcli')
 
         # Wait for scan
