@@ -1,0 +1,20 @@
+[Unit]
+Description=IWA Spring Boot service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+EnvironmentFile=/etc/default/iwa
+WorkingDirectory=/opt/iwa/current
+ExecStart=/usr/bin/java $JAVA_OPTS -jar /opt/iwa/current/iwa.jar
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

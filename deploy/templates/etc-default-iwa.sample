@@ -1,0 +1,9 @@
+# /etc/default/iwa
+# Environment variables for the iwa systemd service
+
+JAVA_OPTS="-Xms256m -Xmx512m -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=prod"
+SPRING_MAIL_TEST_CONNECTION=false
+# Example DB credentials (prefer using secrets manager instead of storing here)
+# SPRING_DATASOURCE_URL=jdbc:postgresql://db.example:5432/iwa
+# SPRING_DATASOURCE_USERNAME=iwa
+# SPRING_DATASOURCE_PASSWORD=supersecret
