@@ -164,6 +164,15 @@ public class UserController extends AbstractBaseController {
         return "user/home";
     }
 
+    @GetMapping("/xss")
+    @ResponseBody
+    public ResponseEntity<String> getUserContent(@Param("keywords") String keywords) {
+
+    	String retContent = "User search using: " + keywords;
+
+        return ResponseEntity.ok().body(retContent);
+    }
+
     @GetMapping(value = {"/profile"})
     public String userProfile(Model model, Principal principal) {
         CustomUserDetails user = (CustomUserDetails) ((Authentication) principal).getPrincipal();
