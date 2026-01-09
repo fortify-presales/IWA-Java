@@ -34,6 +34,7 @@ import org.springframework.security.authentication.dao.DaoAuthenticationProvider
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.builders.WebSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -149,6 +150,12 @@ public class WebSecurityConfiguration extends WebSecurityConfigurerAdapter {
     public class UserConfigurationAdapter extends WebSecurityConfigurerAdapter {
 
         @Override
+        public void configure(WebSecurity web) throws Exception {
+            // Bypass Spring Security for actuator endpoints so health probes and platform checks succeed
+            web.ignoring().antMatchers("/actuator/**");
+        }
+
+        @Override
         protected void configure(HttpSecurity httpSecurity) throws Exception {
             if (activeProfile.contains("dev")) {
                 log.debug("Running development profile");
@@ -181,6 +188,7 @@ public class WebSecurityConfiguration extends WebSecurityConfigurerAdapter {
                             "/swagger-ui/**",
                             "/swagger-ui.html",
                             "/v3/api-docs/**",
+                            "/actuator/**",
                             "/console/*",
                             "/favicon.ico",
                             "/js/**/*",

@@ -59,19 +59,20 @@ spring:
           issuer-uri: https://dev-ahui5f878pgtbrpr.us.auth0.com/
           audiences: https://iwa-api.onfortify.com
   mail:
-    default-encoding: UTF-8
-    host: smtp.gmail.com
-    username: YOUR_USER_NAME
-    password: YOUR_APP_PASSWORD
-    port: 587
-    test-connection: true
-    debug: true
+    default-encoding: ${SPRING_MAIL_DEFAULT_ENCODING:UTF-8}
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    port: ${SPRING_MAIL_PORT:587}
+    test-connection: ${SPRING_MAIL_TEST_CONNECTION:false}
+    debug: ${SPRING_MAIL_DEBUG:true}
     properties:
       mail:
         smtp:
-          auth: true
+          auth: ${SPRING_MAIL_SMTP_AUTH:true}
           starttls:
-            enable: true     
+            enable: ${SPRING_MAIL_SMTP_STARTTLS_ENABLE:true}
+
   jwt:
     secret: eLgvVuw3qIHLNGNH/XNASMiV1RQlVgNakeDsLu7svKQP7jtu2+35wwu/rfwBAQi88wCiuCU66NS66BEySj6jQ4tLOJy4Jn5USbjBk98vMYnT+3me2lYqTUg/tdEg2HHMzhnu+MOXdq5LK1iwr0/uTob/meDy2cIT3ljF+8L7ZuxnwYYW0BTQsM+0nDTYNg4Ik/ChORRBjDyNpplzGvJlqvY5g2RkCyIP0WRe1A==
     expiration-ms: 86400000
@@ -86,10 +87,19 @@ logging:
     org.springframework.web: INFO
     org.springframework.security: INFO
 
-management:
-  health:
-    mail:
-      enabled: false
+#management:
+#  endpoints:
+#    web:
+#      exposure:
+#        include: health,info
+#  endpoint:
+#    health:
+#      show-details: always
+#      probes:
+#        enabled: true
+#  health:
+#    mail:
+#      enabled: false
 
 app:
   name: IWA Pharmacy Direct
@@ -101,5 +111,3 @@ app:
     page-size: 25
   messages:
     home: Welcome to our site!
-
-

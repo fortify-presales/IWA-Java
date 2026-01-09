@@ -77,7 +77,7 @@ To run (and test) locally in development mode, execute the following from the co
 ```
 
 Then navigate to the URL: [http://localhost:8888](http://localhost:8888). You can carry out a number of
-actions unauthenticated, but if you want to login you can do so as the following :
+actions unauthenticated, but if you want to log in you can use the following credentials:
 
 - **user1/password**
   
@@ -85,26 +85,57 @@ There is also an administrative user:
 
 - **admin/password**
 
-Note if you login with `user2`, you will be subsequently asked for a Multi-Factor Authentication (MFA) code. You
-can find this code by examining the console output.
+Note: if you log in with the `user2` account you will be subsequently asked for a Multi-Factor Authentication (MFA) code; the code is printed in the application console.
 
 ### Development (email server)
 
-If you would like to use a development email server, I would recommend using (smtp4dev)[https://github.com/rnwood/smtp4dev.git].
+If you would like to use a development email server, I recommend using smtp4dev: https://github.com/rnwood/smtp4dev.
 The easiest approach is to start it as a docker container:
 
 ```
 docker run --rm -it -p 5000:80 -p 2525:25 rnwood/smtp4dev
 ```
 
-Remove `--rm -it` if you want to leave smtp4dev running in the background, otherwise it will run until you hit CTRL+C.
+Remove `--rm -it` if you want to leave smtp4dev running in the background.
 
-The (application-dev.yml)[./src/main/resources/application-dev.yml] file is already pre-configured to use this configuration. 
-Browse to `http://localhost:5000` to see the emails.
+The `application-dev.yml` file is already pre-configured to use smtp4dev for local development.
+By default the application reads mail configuration from Spring Boot properties which can be provided via environment variables when running in Docker or cloud environments.
+
+Environment variables supported (recommended names):
+
+- SPRING_MAIL_HOST (e.g. smtp4dev host or smtp.gmail.com)
+- SPRING_MAIL_PORT (e.g. 25, 587, 2525)
+- SPRING_MAIL_USERNAME (mail username if required)
+- SPRING_MAIL_PASSWORD (mail password or app password)
+- SPRING_MAIL_DEFAULT_ENCODING (default: UTF-8)
+- SPRING_MAIL_TEST_CONNECTION (true|false) — when true the Docker entrypoint will try to connect to the mail server at startup and wait (useful to avoid failures when mail is required). Default: true
+- SPRING_MAIL_CONNECT_TIMEOUT (seconds) — how long the entrypoint will wait for the mail server before continuing (default: 15)
+- SPRING_MAIL_DEBUG (true|false) — enable JavaMail debug output (optional)
+
+Note: These environment variables are mapped by Spring Boot to the equivalent properties used by the application (for example SPRING_MAIL_HOST -> spring.mail.host). The project entrypoint (`docker-entrypoint.sh`) is already implemented to wait for the mail server only when `SPRING_MAIL_HOST` and `SPRING_MAIL_PORT` are set and `SPRING_MAIL_TEST_CONNECTION` is not `false`/`0`.
+
+Example: run the application with smtp4dev (host.docker.internal lets the container reach a locally running smtp4dev on the Docker host):
+
+```
+# On Windows (PowerShell) - run smtp4dev separately, then run the app container
+docker build -t iwa -f Dockerfile .
+
+docker run --rm -p 8888:8888 \
+  -e SPRING_MAIL_HOST=host.docker.internal \
+  -e SPRING_MAIL_PORT=2525 \
+  -e SPRING_MAIL_TEST_CONNECTION=true \
+  iwa
+```
+
+If you don't want the container to wait for mail at startup (for example in environments where mail is optional) set:
+
+```
+-e SPRING_MAIL_TEST_CONNECTION=false
+```
 
 ### Deploy (Docker Image)
 
-The JAR file can be built into a [Docker](https://www.docker.com/) image using the provided `Dockerfile` and the
+The JAR file can be built into a Docker image using the provided `Dockerfile` and the
 following commands:
 
 ```PowerShell
@@ -120,12 +151,47 @@ docker build -t iwa -f Dockerfile.win .
 This image can then be executed using the following commands:
 
 ```PowerShell
-docker run -d -p 8888:8888 iwa
+# run detached and map port 8888 (container follows the app's configured server.port)
+docker run -d -p 8888:8888 \
+  -e SPRING_MAIL_HOST=smtp.example.com \
+  -e SPRING_MAIL_PORT=587 \
+  -e SPRING_MAIL_USERNAME=youruser \
+  -e SPRING_MAIL_PASSWORD=yourpassword \
+  -e SPRING_MAIL_TEST_CONNECTION=true \
+  iwa
 ```
 
-There is also an example `docker-compose.yml` file that illustrates how to run the application with HTTPS/SSL using
-[nginx](https://www.nginx.com/) and [certbot](https://certbot.eff.org/) - please note this is for reference only as it 
-uses a "hard-coded" domain name.
+Dockerfile notes
+
+- The `docker-entrypoint.sh` script will only wait for the mail server when `SPRING_MAIL_HOST` and `SPRING_MAIL_PORT` are set and `SPRING_MAIL_TEST_CONNECTION` is enabled. This avoids unnecessary blocking for deployments that do not use mail.
+- A built-in healthcheck is available in the Dockerfile that queries the application's HTTP health endpoint (`/actuator/health`). When running a container in orchestration platforms this allows the platform to know when the app is healthy.
+
+Health/Actuator endpoint
+
+- The application exposes Spring Boot Actuator endpoints. The health endpoint is available at `/actuator/health` on the application's HTTP port (the app uses the configured `server.port`, default in development is `8888`).
+- You can test the health endpoint from PowerShell using the following command (PowerShell equivalent of `curl -i`):
+
+```PowerShell
+# Show raw response headers and body
+Invoke-WebRequest -Uri http://localhost:8888/actuator/health -UseBasicParsing | Select-Object StatusCode, Headers, Content
+
+# Or get the JSON body directly
+Invoke-RestMethod -Uri http://localhost:8888/actuator/health
+```
+
+Environment variables in Azure App Service (Portal)
+
+- If you deploy the application to Azure App Service (as a Linux or Windows container or as a Java web app) you can set the same environment variables from the Azure Portal:
+  1. Go to your App Service in the Azure Portal.
+  2. Select "Configuration" -> "Application settings".
+  3. Add new application settings with the names shown above (for example `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`) and their values.
+  4. Save and restart your App Service.
+
+Azure will expose these values to the application as environment variables, which Spring Boot will pick up automatically.
+
+Security notes
+
+- Never commit credentials (for example `SPRING_MAIL_PASSWORD`) to source control. Use platform secrets (Azure Key Vault, Kubernetes Secrets, etc.) or the App Service "Application settings" which is stored securely by Azure.
 
 ## Application Security Testing Integrations
 
@@ -166,11 +232,11 @@ FOD_PAT=XXXX
 
 ### SAST using Fortify SCA command line
 
-There is an example PowerShell script [fortify-sast.ps1](bin/fortify-sast.ps1) that you can use to execute static application security testing
+There is an example PowerShell script [sast-scan.ps1](bin/sast-scan.ps1) that you can use to execute static application security testing
 via [Fortify SCA](https://www.microfocus.com/en-us/products/static-code-analysis-sast/overview).
 
 ```PowerShell
-.\bin\fortify-sast.ps1 -SkipSSC
+.\\bin\\sast-scan.ps1 -SkipSSC
 ```
 
 This script runs a `sourceanalyzer` translation and scan on the project's source code. It creates a Fortify Project Results file called `IWA-Java.fpr`
@@ -196,11 +262,11 @@ The `SSC_AUTH_TOKEN` entry should be set to the value of a 'CIToken' created in 
 
 ### SAST using Fortify ScanCentral SAST
 
-There is a PowerShell script [fortify-scancentral-sast.ps1](bin\fortify-scancentral-sast.ps1) that you can use to package
+There is a PowerShell script [scancentral-sast-scan.ps1](bin/scancentral-sast-scan.ps1) that you can use to package
 up the project and initiate a remote scan using Fortify ScanCentral SAST:
 
 ```PowerShell
-.\bin\fortify-scancentral-sast.ps1
+.\\bin\\scancentral-sast-scan.ps1
 ```
 
 In order to use ScanCentral SAST you will need to have entries in the `.env` similar to the following:
@@ -260,15 +326,13 @@ Then you can start a scan using the following command line:
 
 This will start a scan using the Default Settings and Login Macro files provided in the `etc` directory. It assumes
 the application is running on "localhost:8888". It will run a "Critical and High Priority" scan using the policy with id 1008. 
-Once completed you can open the WebInspect "Desktop Client" and navigate to the scan created for this execution. An FPR file
-called `IWA-DAST.fpr` will also be available - you can open it with `auditworkbench` (or generate a
-PDF report from using `ReportGenerator`). You could also upload it to Fortify SSC or Fortify on Demand.
+Once completed you can open the WebInspect Desktop Client and navigate to the scan created for this execution. An FPR file
+called `IWA-DAST.fpr` will also be available — you can open it with `auditworkbench` (or generate a PDF report using `ReportGenerator`). You could also upload it to Fortify SSC or Fortify on Demand.
 
-There is an example PowerShell script file [fortify-webinspect.ps1](bin\fortify-webinspect.ps1) that you can run to 
-execute the scan and upload the results to SSC:
+There is an example PowerShell script file [webinspect-scan.ps1](bin/webinspect-scan.ps1) that you can run to execute the scan and upload the results to SSC:
 
 ```PowerShell
-.\bin\fortify-webinspect.ps1
+.\\bin\\webinspect-scan.ps1
 ```
 
 ### DAST using Fortify ScanCentral DAST
@@ -284,8 +348,8 @@ fcli sc-dast scan wait-for ::curScan::
 
 ### DAST using Fortify on Demand
 
-Fortify on Demands provides two means of carrying out DAST scanning: traditional DAST and _DAST Automated_.
-In this section we will using _DAST Automated_ as this is more suitable of command and pipeline integration.
+Fortify on Demand provides two means of carrying out DAST scanning: traditional DAST and _DAST Automated_.
+In this section we will use _DAST Automated_ as this is more suitable for command- and pipeline-based integration.
 
 You can invoke a Fortify on Demand _DAST Automated_ scan using the [FCLI](https://github.com/fortify/fcli) utility.
 For example:
@@ -358,7 +422,7 @@ as a workflow for a ScanCentral DAST execution. In order to carry out the exampl
 to have installed WebInspect locally `WIRCServerSetup64-ProxyOnly.msi` which is available in the `Dynamic_Addons.zip` of the
 ScanCentral DAST installation media.
 
-There are some example [Selenium](https://www.selenium.dev/) which can used can be used to execute a simple 
+There are some example Selenium scripts that can be used to execute a simple
 functional test of the running application. There are also a couple of PowerShell scripts [start_fast_proxy.ps1](`.\bin\start_fast_proxy.ps1`) and [stop_fast_proxy.ps1](`.\bin\stop_fast_proxy.ps1`) that can
 be used to start/stop the FAST Proxy. In order to use these scripts you will need to have entries in the `.env` file similar to the following:
 
@@ -402,23 +466,19 @@ The FAST executable from the first terminal should terminate and then a scan exe
 
 ## Build and Pipeline Integrations
 
-### Jenkins
+### Jenkins Pipeline
 
-If you are using [Jenkins](https://jenkins.io/), a comprehensive `Jenkinsfile` is provided to automate all of the typical
-steps of a typical DevSecOps Continuous Delivery (CD) process. The example makes use of Fortify ScanCentral SAST/DAST and
+If you are using [Jenkins](https://jenkins.io/), a comprehensive `Jenkinsfile` is provided to automate the
+typical steps of a DevSecOps Continuous Delivery (CD) process. The example makes use of Fortify ScanCentral SAST/DAST and
 Sonatype Nexus IQ for Software Composition Analysis.
 
-To make use of the `Jenkinsfile` create a new Jenkins *Pipeline* Job and in the *Pipeline*
-section select `Pipeline script from SCM` and enter the details of a forked version of this GitHub repository.
+To make use of the `Jenkinsfile` create a new Jenkins *Pipeline* Job and in the *Pipeline* section select `Pipeline script from SCM` and enter the details of a forked version of this GitHub repository.
 
-The first run of the pipeline should be treated as a "setup" step as it will
-create some *Job Parameters* which you can then select to determine which features
-you want to enable in the pipeline.
+The first run of the pipeline should be treated as a "setup" step as it will create some *Job Parameters* which you can then select to determine which features you want to enable in the pipeline.
 
 You will need to have installed and configured the [Fortify](https://plugins.jenkins.io/fortify/) Jenkins plugins.
 
-There is lots of documentation in the `Jenkinsfile` itself so please examine it to see what else
-you will need to do for a successful invocation.
+The `Jenkinsfile` contains additional documentation — please review it for deployment details and options.
 
 ### GitHub Actions
 
@@ -432,7 +492,7 @@ For integrations with other pipeline tools please see [https://github.com/fortif
 
 ## Developing and Contributing
 
-Please see the [Contribution Guide](CONTRIBUTING.md) for information on how to develop and contribute.
+Please see the Contribution Guide (CONTRIBUTING.md) in this repository if present; otherwise open an Issue for contribution guidance.
 
 If you have any problems, please consult [GitHub Issues](https://github.com/fortify-presales/IWA-Java/issues) to see if it has already been discussed.
 
