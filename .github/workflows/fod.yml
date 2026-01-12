@@ -144,10 +144,10 @@ jobs:
       # See: https://github.com/marketplace/actions/fortify-ast-scan
       #
       - name: Run Fortify on Demand SAST Scan
-        uses: fortify/github-action@v1
+        uses: fortify/github-action@v2
         with:
           sast-scan: true
-          debricked-sca-scan: false # we will do this separately using fcli
+          debricked-sca-scan: true
         env:
           FOD_URL: ${{ vars.FOD_URL }}
           #FOD_TENANT: ${{secrets.FOD_TENANT}}
@@ -159,48 +159,13 @@ jobs:
           #FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
           DO_SETUP: true
           SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}" --sdlc-status Development --app-owner {1} --assessment-type "{2}"', env.FOD_PARENT_RELEASE, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
-          PACKAGE_EXTRA_OPTS: -bt gradle -bf build.gradle -bc "clean build -x test"
+          PACKAGE_EXTRA_OPTS: -bt gradle -bf build.gradle -bc "clean build -x test" -oss
           # FOD_SAST_SCAN_EXTRA_OPTS:
           DO_WAIT: true
-          DO_POLICY_CHECK: false
+          DO_POLICY_CHECK: false  # we will do policy check in a separate job after DAST scan
           DO_JOB_SUMMARY: true
           DO_PR_COMMENT: true
           DO_EXPORT: true
-
-  FoD-OSS-Scan:
-    runs-on: ubuntu-latest
-    if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runFoDOSSScan == 'true') }}
-    needs: [ Env-Prepare, FoD-SAST-Scan ] # for creating new FoD release (if required)
-    env: 
-      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
-      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Fortify tools
-        uses: fortify/github-action/setup@v1
-        with:
-          #tool-definitions: https://github.com/fortify/tool-definitions/releases/download/v1/tool-definitions.yaml.zip
-          export-path: true
-          fcli: latest
-          debricked-cli: latest
-      - name: Perform FoD OSS Scan
-        shell: bash
-        run: |
-          fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session github-actions
-          rm -f $PACKAGE_FILE
-          debricked resolve
-          zip $PACKAGE_FILE gradle.debricked.lock debricked-config.yaml     
-          fcli fod oss-scan start --release "${FOD_RELEASE}" -f $PACKAGE_FILE --store curScan --fod-session github-actions
-          sleep 10
-          echo "fod_scan_id=$(fcli util var contents curScan -o 'expr={scanId}')" >> $GITHUB_OUTPUT
-          fcli fod oss-scan wait-for ::curScan:: --fod-session github-actions
-          fcli fod session logout --fod-session github-actions
-        env:
-          FOD_API_URI: ${{ vars.FOD_API_URL }}
-          FOD_CLIENT_ID: ${{ secrets.FOD_CLIENT_ID }}
-          FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
-          PACKAGE_FILE: "fortifypackage.zip"
 
   Deploy-App:
     runs-on: ubuntu-latest
@@ -242,7 +207,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Fortify tools
-        uses: fortify/github-action/setup@v1
+        uses: fortify/github-action/setup@v2
         with:
           #tool-definitions: https://github.com/fortify/tool-definitions/releases/download/v1/tool-definitions.yaml.zip
           export-path: true
@@ -273,7 +238,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Fortify tools
-        uses: fortify/github-action/setup@v1
+        uses: fortify/github-action/setup@v2
         with:
           #tool-definitions: https://github.com/fortify/tool-definitions/releases/download/v1/tool-definitions.yaml.zip
           export-path: true
