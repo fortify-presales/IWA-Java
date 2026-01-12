@@ -43,10 +43,6 @@ on:
         description: 'Carry out SAST scan using Fortify on Demand'
         required: false
         default: 'true'
-      runFoDOSSScan:
-        description: 'Carry out OSS scan using Fortify on Demand'
-        required: false
-        default: 'true'  
       deployApp:
         description: 'Deploy App'
         required: false
@@ -170,8 +166,8 @@ jobs:
   Deploy-App:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.deployApp == 'true') }}
-    needs: [ Env-Prepare, Build-And-Unit-Test, FoD-SAST-Scan, FoD-OSS-Scan ]
-    env: 
+    needs: [ Env-Prepare, Build-And-Unit-Test, FoD-SAST-Scan ]
+    env:
       FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
       FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }} 
     steps:
