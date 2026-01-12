@@ -242,6 +242,7 @@ jobs:
       - name: Check FoD Release
         shell: bash
         run: |
+          fcli --version
           fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session github-actions
           fcli fod action run release-summary --release "${FOD_RELEASE}" --fod-session github-actions >> $GITHUB_STEP_SUMMARY
           fcli fod action run etc/custom-check-policy.action --on-unsigned=ignore --release "${FOD_RELEASE}" --fod-session github-actions
