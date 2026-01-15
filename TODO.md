@@ -2,7 +2,6 @@
 
 #### Code
 
-~~- [ ] Static/Dynamic correlation source code changes~~
 - [X] Multi-Factor Authentication source code changes
 - [X] Checkout workflow for Selenium scripts 
 - [X] Login workflow for Selenium scripts
@@ -22,7 +21,7 @@
 
 - [X] Provide alternate Gradle build scripts
 - [X] Include log4j dependency vulnerabilities (by using affected version of log4j)
-- [ ] Azure Resource Manager deployment
+- [X] Azure deployment
 - [X] Migrate GitHub pipelines to fcli
 - [X] Update Jenkinsfile for fcli
 - [X] Add FAST example scripts

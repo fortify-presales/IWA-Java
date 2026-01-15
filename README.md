@@ -1,6 +1,9 @@
-[![DevSecOps with Fortify on Demand](https://github.com/fortify-presales/IWA-Java/actions/workflows/fod.yml/badge.svg)](https://github.com/fortify-presales/-Java/actions/workflows/fod.yml)
+[![Build and Test](https://github.com/fortify-presales/IWA-PharmacyDirect/actions/workflows/build.yml/badge.svg)](https://github.com/fortify-presales/IWA-PharmacyDirect/actions/workflows/build.yml)
 
-# IWA (Insecure Web App) Pharmacy Direct - Java edition
+[![OpenText FoD](https://github.com/fortify-presales/IWA-PharmacyDirect/actions/workflows/fod.yml/badge.svg)](https://github.com/fortify-presales/IWA-PharmacyDirect/actions/workflows/fod.yml)
+[![OpenText ScanCentral](https://github.com/fortify-presales/IWA-PharmacyDirect/actions/workflows/scancentral.yml/badge.svg)](https://github.com/fortify-presales/IWA-PharmacyDirect/actions/workflows/scancentral.yml)
+
+# IWA (Insecure Web App) Pharmacy Direct
 
 #### Table of Contents
 
@@ -34,7 +37,7 @@
 
 _IWA (Insecure Web App) Pharmacy Direct_ is an example Java/Spring Web Application for use in **DevSecOps** scenarios and demonstrations.
 It includes some examples of bad and insecure code - which can be found using static and dynamic application
-security testing tools such as those provided by [Micro Focus Fortify](https://www.microfocus.com/en-us/cyberres/application-security).
+security testing tools such as those provided by [OpenText Application Security](https://www.microfocus.com/en-us/cyberres/application-security).
 
 One of the main aims of this project is to illustrate how security can be embedded early ("Shift-Left") and continuously ("CI/CD") in
 the development lifecycle. Therefore, a number of examples of "integrations" to common CI/CD pipeline tools are provided.
@@ -299,7 +302,7 @@ What the script does (high level)
 
 - Builds the project using Gradle (runs `./gradlew clean build -x test`).
 - Runs Fortify `sourceanalyzer` translation step to collect project source and compile data.
-- Runs the Fortify scan step to produce an FPR file (default name: `IWA-Java.fpr`).
+- Runs the Fortify scan step to produce an FPR file (default name: `IWA-PharmacyDirect.fpr`).
 - Optionally generates a PDF report (if `ReportGenerator` is available).
 
 Configuration and common options
@@ -309,8 +312,8 @@ Configuration and common options
 
 Typical outputs
 
-- `IWA-Java.fpr` — Fortify Project Results file containing SAST findings.
-- `IWA-Java.pdf` — (Optional) PDF report generated from the FPR if the report tool is installed.
+- `IWA-PharmacyDirect.fpr` — Fortify Project Results file containing SAST findings.
+- `IWA-PharmacyDirect.pdf` — (Optional) PDF report generated from the FPR if the report tool is installed.
 - Exit code 0 indicates a successful scan; non-zero indicates failures in build/translate/scan steps.
 
 Uploading results to Fortify Software Security Center (SSC)
@@ -342,7 +345,7 @@ In order to use ScanCentral SAST you will need to have entries in the `.env` sim
 ```
 SSC_URL=http://localhost:8080/ssc
 SSC_AUTH_TOKEN=6b16aa46-35d7-4ea6-98c1-8b780851fb37
-SSC_APP_NAME=IWA-Java
+SSC_APP_NAME=IWA-PharmacyDirect
 SSC_APP_VER_NAME=main
 SCANCENTRAL_CTRL_URL=http://localhost:8080/scancentral-ctrl
 SCANCENTRAL_CTRL_TOKEN=96846342-1349-4e36-b94f-11ed96b9a1e3
@@ -410,7 +413,7 @@ For example:
 
 ```
 fcli sc-dast session login --ssc-url http://YOUR_SSC.DOMAIN -t YOUR_SSC_CI_TOKEN
-fcli sc-dast scan -n "IWA-Java - FCLI" -s YOUR_SCAN_SETTINGS_ID --store curScan
+fcli sc-dast scan -n "IWA-PharmacyDirect - FCLI" -s YOUR_SCAN_SETTINGS_ID --store curScan
 fcli sc-dast scan wait-for ::curScan::
 ```
 
@@ -562,7 +565,7 @@ For integrations with other pipeline tools please see [https://github.com/fortif
 
 Please see the Contribution Guide (CONTRIBUTING.md) in this repository if present; otherwise open an Issue for contribution guidance.
 
-If you have any problems, please consult [GitHub Issues](https://github.com/fortify-presales/IWA-Java/issues) to see if it has already been discussed.
+If you have any problems, please consult [GitHub Issues](https://github.com/fortify-presales/IWA-PharmacyDirect/issues) to see if it has already been discussed.
 
 ## Licensing
 

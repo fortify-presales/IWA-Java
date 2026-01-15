@@ -12,7 +12,12 @@
 #   API Key credentials can be obtained from your FoD tenant, under Administration -> Settings -> API
 #   It is recommended to create credentials with 'Security Lead' Role selected.
 #   "Automated Audit preference" should be configured for the release's Static Scan Settings.
-name: DevSecOps with Fortify on Demand
+name: Security Scan with OpenText Application Security (FoD)
+
+# Set default permissions for the GITHUB_TOKEN
+permissions:
+  contents: read
+  pull-requests: write
 
 on:
   # Triggers the workflow on push or pull request events but only for the main or develop branches
@@ -28,13 +33,15 @@ on:
       - 'tests/**'
       - '*.md'
       - 'LICENSE'
-    #branches-ignore:
-    #  - main
-    #  - develop
     branches:
-      - '**'        # matches every branch
+      - main
+      - develop
+      - feature/**    # runs on any branch named feature/...
+      - bugfix/**     # runs on any branch named bugfix/...
   pull_request:
-    branches: [ main, develop ]
+    branches:
+      - main
+      - develop
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -81,45 +88,7 @@ jobs:
             echo "Running in a branch pipeline ..."
             echo "FOD_RELEASE=${{ env.DEFAULT_APP_NAME }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
             echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}:${{ env.DEFAULT_PARENT_RELEASE_NAME }}" >> $GITHUB_OUTPUT
-          fi
-          
-  Build-And-Unit-Test:
-    runs-on: ubuntu-latest
-    needs: [ Env-Prepare ]
-    env: 
-      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
-      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Check environment variables
-        run: |
-          echo "JAVA_VERSION=${{ env.JAVA_VERSION }}"
-          echo "GRADLE_VERSION=${{ env.GRADLE_VERSION }}"
-          echo "BASE_DIR=${{ env.BASE_DIR }}"
-          echo "FOD_RELEASE=${{ env.FOD_RELEASE }}"
-          echo "FOD_PARENT_RELEASE=${{ env.FOD_PARENT_RELEASE }}"
-      # Setup JDK 17 on host
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: ${{ env.JAVA_VERSION}}
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: ${{ env.GRADLE_VERSION }}
-      # Build / Test with Gradle
-      - name: Build with Gradle
-        run: ./gradlew clean build test
-      # Publish test results
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          files: |
-            build/test-results/**/*.xml
-            build/test-results/**/*.trx
-            build/test-results/**/*.json     
+          fi 
 
   FoD-SAST-Scan:
     runs-on: ubuntu-latest
@@ -163,39 +132,10 @@ jobs:
           DO_PR_COMMENT: true
           DO_EXPORT: true
 
-  Deploy-App:
-    runs-on: ubuntu-latest
-    if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.deployApp == 'true') }}
-    needs: [ Env-Prepare, Build-And-Unit-Test, FoD-SAST-Scan ]
-    env:
-      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
-      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }} 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Deploy App
-        shell: bash
-        run: |
-          echo "Simulating deployment..."
-        env:
-          FOD_APP_NAME: ${{ env.DEFAULT_APP_NAME }}
-      # TBD 
-
-  #Functional-Test:
-  #  runs-on: ubuntu-latest
-  #  if: ${{ always() }}
-  #  needs: [ Env-Prepare, Deploy-App ]
-  #  env: 
-  #    FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
-  #    FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
-  #  steps:
-  #    - name: Checkout
-  #      uses: actions/checkout@v4
-  
   FoD-DAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.ref_name == github.event.repository.default_branch) && (github.event.inputs.runFoDDASTScan == 'true') }}
-    needs: [ Env-Prepare, Deploy-App ]
+    needs: [ Env-Prepare, FoD-SAST-Scan ]
     env: 
       FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
       FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
@@ -222,44 +162,66 @@ jobs:
           FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
           FOD_RELEASE: ${{ env.FOD_RELEASE }}
 
+  yaml
   Verify-Security-Policy:
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [ Env-Prepare, FoD-DAST-Scan ]
-    env: 
+    needs: [ Env-Prepare, FoD-SAST-Scan ]
+    env:
       FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
       FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
-    continue-on-error: true # allow the workflow to continue even if this job fails
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup Fortify tools
-        uses: fortify/github-action/setup@v2
-        with:
-          #tool-definitions: https://github.com/fortify/tool-definitions/releases/download/v1/tool-definitions.yaml.zip
-          export-path: true
-          fcli: latest
-      - name: Check FoD Release
-        shell: bash
-        run: |
-          fcli --version
-          fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session github-actions
-          fcli fod action run release-summary --release "${FOD_RELEASE}" --fod-session github-actions >> $GITHUB_STEP_SUMMARY
-          fcli fod action run etc/custom-check-policy.action --on-unsigned=ignore --release "${FOD_RELEASE}" --fod-session github-actions
-          fcli fod session logout --fod-session github-actions
+      - name: Wait for FoD-DAST-Scan to finish (if it started)
         env:
-          FOD_API_URI: ${{ vars.FOD_API_URL }}
-          FOD_CLIENT_ID: ${{ secrets.FOD_CLIENT_ID }}
-          FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
-          FOD_RELEASE: ${{ env.FOD_RELEASE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs"
+          echo "Looking for job named 'FoD-DAST-Scan' in this workflow run..."
+          # install jq if missing
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -y && sudo apt-get install -y jq
+          fi
+          # poll for the job status (max ~30 minutes)
+          max_attempts=180
+          attempt=0
+          while [ $attempt -lt $max_attempts ]; do
+            attempt=$((attempt+1))
+            job_json=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "$API")
+            job_exists=$(echo "$job_json" | jq '.jobs[]? | select(.name=="FoD-DAST-Scan")' || true)
+            if [ -z "$job_exists" ] || [ "$job_exists" = "null" ]; then
+              echo "No FoD-DAST-Scan job found for this run. Proceeding."
+              break
+            fi
+            status=$(echo "$job_json" | jq -r '.jobs[] | select(.name=="FoD-DAST-Scan") | .status')
+            conclusion=$(echo "$job_json" | jq -r '.jobs[] | select(.name=="FoD-DAST-Scan") | .conclusion')
+            echo "FoD-DAST-Scan status: $status, conclusion: $conclusion"
+            if [ "$status" = "completed" ]; then
+              echo "FoD-DAST-Scan completed (conclusion: $conclusion). Continuing."
+              break
+            fi
+            echo "Waiting for FoD-DAST-Scan to finish... (attempt $attempt)"
+            sleep 10
+          done
+          if [ $attempt -ge $max_attempts ]; then
+            echo "Timed out waiting for FoD-DAST-Scan; continuing anyway."
+          fi
 
-  #Release-To-Prod:
-  #  runs-on: ubuntu-latest
-  #  needs: [ Env-Prepare, Verify-Security-Policy ]
-  #  env: 
-  #    FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
-  #    FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
-  #  steps:
-  #    - name: Checkout
-  #      uses: actions/checkout@v4
-  
+      - name: Run Fortify on Demand SAST Scan
+        uses: fortify/github-action@v2
+        with:
+          sast-scan: false
+          debricked-sca-scan: false
+        env:
+          FOD_URL: ${{ vars.FOD_URL }}
+          FOD_CLIENT_ID: ${{secrets.FOD_CLIENT_ID}}
+          FOD_CLIENT_SECRET: ${{secrets.FOD_CLIENT_SECRET}}
+          DO_SETUP: false
+          DO_WAIT: false
+          DO_POLICY_CHECK: true
+          DO_JOB_SUMMARY: false
+          DO_PR_COMMENT: true
+          DO_EXPORT: true
