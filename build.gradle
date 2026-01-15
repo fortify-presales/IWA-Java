@@ -114,15 +114,23 @@ description = 'IWA (Insecure Web App) Pharmacy Direct - an insecure web applicat
 sourceCompatibility = JavaVersion.VERSION_11
 targetCompatibility = JavaVersion.VERSION_11
 
+// Add root `bicep` as a resource dir so files are included in the runtime JAR
 sourceSets {
     main {
-        java.srcDirs = ['src/main/java','src/iac']
-        resources.srcDirs= ['src/main/resources']
+        java.srcDirs = ['src/main/java']
+        resources.srcDirs= ['src/main/resources', 'bicep']
     }
     test {
         java.srcDirs = ['src/test/java']
 	    resources.srcDirs = ['src/test/resources']	
     } 
+}
+
+// Put `Dockerfile` at the root of the produced Spring Boot JAR
+bootJar {
+    from('Dockerfile') {
+        into '' // place at jar root
+    }
 }
 
 publishing {

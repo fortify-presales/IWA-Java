@@ -87,7 +87,47 @@ There is also an administrative user:
 
 Note: if you log in with the `user2` account you will be subsequently asked for a Multi-Factor Authentication (MFA) code; the code is printed in the application console.
 
-### Development (email server)
+### Docker Image
+
+The JAR file can also be built into a Docker image using the provided `Dockerfile` and the
+following commands:
+
+```PowerShell
+docker build -t iwa -f Dockerfile .
+```
+
+This image can then be executed using the following commands:
+
+```PowerShell
+docker run -d -p 8888:8888 \
+  -e SPRING_MAIL_HOST=smtp.example.com \
+  -e SPRING_MAIL_PORT=587 \
+  -e SPRING_MAIL_USERNAME=youruser \
+  -e SPRING_MAIL_PASSWORD=yourpassword \
+  -e SPRING_MAIL_TEST_CONNECTION=true \
+  iwa
+```
+
+#### Dockerfile notes
+
+- The `docker-entrypoint.sh` script will only wait for the mail server when `SPRING_MAIL_HOST` and `SPRING_MAIL_PORT` are set and `SPRING_MAIL_TEST_CONNECTION` is enabled. This avoids unnecessary blocking for deployments that do not use mail.
+- A built-in healthcheck is available in the Dockerfile that queries the application's HTTP health endpoint (`/actuator/health`). When running a container in orchestration platforms this allows the platform to know when the app is healthy.
+
+### Health/Actuator endpoint
+
+The application exposes Spring Boot Actuator endpoints. The health endpoint is available at `/actuator/health` on the application's 
+HTTP port (the app uses the configured `server.port`, default in development is `8888`).
+- You can test the health endpoint from PowerShell using the following command (PowerShell equivalent of `curl -i`):
+
+```PowerShell
+# Show raw response headers and body
+Invoke-WebRequest -Uri http://localhost:8888/actuator/health -UseBasicParsing | Select-Object StatusCode, Headers, Content
+
+# Or get the JSON body directly
+Invoke-RestMethod -Uri http://localhost:8888/actuator/health
+```
+
+### Development Email Server
 
 If you would like to use a development email server, I recommend using smtp4dev: https://github.com/rnwood/smtp4dev.
 The easiest approach is to start it as a docker container:
@@ -117,7 +157,6 @@ Note: These environment variables are mapped by Spring Boot to the equivalent pr
 Example: run the application with smtp4dev (host.docker.internal lets the container reach a locally running smtp4dev on the Docker host):
 
 ```
-# On Windows (PowerShell) - run smtp4dev separately, then run the app container
 docker build -t iwa -f Dockerfile .
 
 docker run --rm -p 8888:8888 \
@@ -133,132 +172,161 @@ If you don't want the container to wait for mail at startup (for example in envi
 -e SPRING_MAIL_TEST_CONNECTION=false
 ```
 
-### Deploy (Docker Image)
+## Deploying the Application
 
-The JAR file can be built into a Docker image using the provided `Dockerfile` and the
-following commands:
+You can deploy the containerised application to Azure using the included PowerShell helper script `deploy.ps1`. The script will optionally build a local Docker image, push it to an Azure Container Registry (ACR), create or update a Web App, and apply application settings defined in a `deploy.config` file or environment variables.
 
-```PowerShell
-docker build -t iwa -f Dockerfile .
+Prerequisites
+
+- Docker installed and running.
+- Azure CLI (`az`) installed and authenticated (`az login`).
+- Optional: permission to create resource groups / app plans / web apps in the target subscription.
+
+Quick preview (dry-run)
+
+Before making any changes you can preview the effective configuration the script will use:
+
+```powershell
+# Show resolved configuration in a neat table (values masked by default)
+.\deploy.ps1 -WhatIfConfig
+
+# Show which environment variable names were checked and reveal unmasked values for debugging
+.\deploy.ps1 -WhatIfConfig -Verbose -Debug
 ```
 
-or on Windows:
+A few important notes about how `deploy.ps1` configures containers and app settings:
 
-```PowerShell
-docker build -t iwa -f Dockerfile.win .
+- When deploying to an App Service plan that is Linux and an ACR image is available, `deploy.ps1` will attempt to supply the container image and registry settings at create-time (using the Azure CLI create flags). This reduces the number of Azure CLI calls and avoids later deprecation warnings.
+- Immediately after `az webapp create` the script verifies the Web App's container configuration. If the expected image is not present (or cannot be read), the script will automatically fall back to `az webapp config container set` to apply the container image and registry settings, and will re-check success.
+- The script logs the final full image reference it will push and deploy. Look for the cyan log line printed before tagging/pushing: `Final ACR image reference to push: <acrLoginServer>/<image>:<tag>` — this helps confirm there is no accidental double-prefixing of the registry host.
+- `-WhatIfConfig` prints a neat table of the effective configuration (including keys from the `[env]` section that would be applied as app settings). By default secret-looking values are masked; pass PowerShell's built-in `-Debug` common parameter (together with `-WhatIfConfig`) to reveal unmasked values for debugging.
+
+# Key behaviour and precedence
+
+- Configuration precedence (highest -> lowest):
+  1. Script parameters passed on the command line (e.g. `-ResourceGroup my-rg`).
+  2. Environment variables (section-prefixed or generic UPPER_SNAKE names).
+  3. Values in `deploy.config` (the file is optional — the script will create no changes if it's absent).
+
+- Environment variable naming:
+  - For parameters defined in a section of `deploy.config`, the script looks first for a section-prefixed variable in UPPER_SNAKE form (for example `AZURE_ACR_NAME` for `AcrName` in the `[azure]` section).
+  - Then it checks the generic UPPER_SNAKE name (for example `ACR_NAME`).
+  - For `[env]` entries (application settings) the script prefers the exact name (for example `SPRING_MAIL_HOST`) but will also check section-prefixed names.
+
+Example `deploy.config`
+
+Place this file next to `deploy.ps1` as `deploy.config` to provide defaults and grouped sections. Values can be overridden by environment variables or script parameters.
+
+```ini
+[azure]
+AcrName = iwadevuks
+ResourceGroup = rg-iwa-dev-uks-001
+Location = uksouth
+PlanName = iwa-webapp-dev-uks-001
+
+[docker]
+ImageName = iwa
+Tag = latest
+Build = true
+
+[env]
+SPRING_MAIL_HOST = smtp.gmail.com
+SPRING_MAIL_PORT = 587
+SPRING_MAIL_USERNAME = youruser
+SPRING_MAIL_PASSWORD = yourpassword
+SPRING_MAIL_DEFAULT_ENCODING = UTF-8
+SPRING_MAIL_TEST_CONNECTION = true
 ```
 
-This image can then be executed using the following commands:
+Common deploy scenarios
 
-```PowerShell
-# run detached and map port 8888 (container follows the app's configured server.port)
-docker run -d -p 8888:8888 \
-  -e SPRING_MAIL_HOST=smtp.example.com \
-  -e SPRING_MAIL_PORT=587 \
-  -e SPRING_MAIL_USERNAME=youruser \
-  -e SPRING_MAIL_PASSWORD=yourpassword \
-  -e SPRING_MAIL_TEST_CONNECTION=true \
-  iwa
+- Build locally, push to ACR and deploy to Web App (using CLI args):
+
+```powershell
+.\deploy.ps1 -ResourceGroup rg-iwa-dev-uks-001 -AcrName iwadevuks -AppName iwajava -ImageName iwa -Build -WaitFor
 ```
 
-Dockerfile notes
+- Use `deploy.config` + environment variables (no CLI arguments):
 
-- The `docker-entrypoint.sh` script will only wait for the mail server when `SPRING_MAIL_HOST` and `SPRING_MAIL_PORT` are set and `SPRING_MAIL_TEST_CONNECTION` is enabled. This avoids unnecessary blocking for deployments that do not use mail.
-- A built-in healthcheck is available in the Dockerfile that queries the application's HTTP health endpoint (`/actuator/health`). When running a container in orchestration platforms this allows the platform to know when the app is healthy.
-
-Health/Actuator endpoint
-
-- The application exposes Spring Boot Actuator endpoints. The health endpoint is available at `/actuator/health` on the application's HTTP port (the app uses the configured `server.port`, default in development is `8888`).
-- You can test the health endpoint from PowerShell using the following command (PowerShell equivalent of `curl -i`):
-
-```PowerShell
-# Show raw response headers and body
-Invoke-WebRequest -Uri http://localhost:8888/actuator/health -UseBasicParsing | Select-Object StatusCode, Headers, Content
-
-# Or get the JSON body directly
-Invoke-RestMethod -Uri http://localhost:8888/actuator/health
+```powershell
+$env:AZURE_ACR_NAME = 'iwadevuks'
+$env:AZURE_RESOURCE_GROUP = 'rg-iwa-dev-uks-001'
+.\deploy.ps1 -ImageName iwa -Build -WaitFor
 ```
 
-Environment variables in Azure App Service (Portal)
+- Deploy but do not block waiting for mail server checks (useful for cloud environments):
 
-- If you deploy the application to Azure App Service (as a Linux or Windows container or as a Java web app) you can set the same environment variables from the Azure Portal:
-  1. Go to your App Service in the Azure Portal.
-  2. Select "Configuration" -> "Application settings".
-  3. Add new application settings with the names shown above (for example `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`) and their values.
-  4. Save and restart your App Service.
+```powershell
+# Disable the entrypoint's mail-server wait logic
+$env:SPRING_MAIL_TEST_CONNECTION = 'false'
+.\deploy.ps1 -ResourceGroup rg-iwa-dev-uks-001 -AcrName iwadevuks -AppName iwajava -ImageName iwa -Build
+```
 
-Azure will expose these values to the application as environment variables, which Spring Boot will pick up automatically.
+Useful options
 
-Security notes
+- `-WhatIfConfig` — Print the effective configuration (table) and exit. Use `-Verbose` to show which env var names were checked. Pass PowerShell's built-in `-Debug` to reveal unmasked secret values.
+- `-Build` — Build the Docker image locally before tagging and pushing to ACR.
+- `-WaitFor` — After restarting the Web App the script will poll Azure until the Web App reports the `Running` state (useful in CI). Configure timeout/interval with `-WaitTimeoutSeconds` and `-WaitIntervalSeconds`.
 
-- Never commit credentials (for example `SPRING_MAIL_PASSWORD`) to source control. Use platform secrets (Azure Key Vault, Kubernetes Secrets, etc.) or the App Service "Application settings" which is stored securely by Azure.
+Notes
+
+- Application settings defined in the `[env]` section of `deploy.config` are applied to the Azure Web App and become environment variables for the running container (for example `SPRING_MAIL_HOST`).
+- DOCKER/ACR credentials may be obtained automatically via the Azure CLI; you can also provide `AcrUser`/`AcrPass` via env/config/CLI if required.
+- The script is conservative by default: it masks sensitive values in `-WhatIfConfig` output unless you explicitly request unmasked output with `-Debug`.
 
 ## Application Security Testing Integrations
 
-### Creating an environment (.env) file
-
-Most of the following examples need environment and user specific credentials. These are loaded from a file called `.env`
-in the project root directory. This file is not created by default (and should never be stored in source control). An example
-with all of the possible settings for the following scenarios is illustrated below:
-
-```
-# Application URL (locally)
-APP_URL=http://localhost:8888
-# Software Security Center
-SSC_URL=http://[YOUR-SSC-SERVER]
-SSC_USERNAME=admin
-SSC_PASSWORD=password
-SSC_AUTH_TOKEN=XXX
-SSC_APP_NAME=IWA-Java
-SSC_APP_VER_NAME=main
-# ScanCentral SAST/DAST
-SCANCENTRAL_CTRL_URL=http://[YOUR-SCANCENTRAL-SERVER]/scancentral-ctrl
-SCANCENTRAL_CTRL_TOKEN=XXX
-SCANCENTRAL_POOL_ID=00000000-0000-0000-0000-000000000002
-SCANCENTRAL_EMAIL=info@microfocus.com
-SCANCENTRAL_DAST_API=http://[YOUR-SCANCENTRAL-DAST-SERVER]/api/
-# ScanCentral FAST
-FAST_EXE=C:\\Program Files\\Micro Focus WIRC Server\\Fast.exe
-FAST_PORT=8087
-FAST_PROXY=127.0.0.1:8087
-# Fortify on Demand
-FOD_API_URL=https://api.ams.fortify.com
-FOD_API_KEY=XXXX
-FOD_API_SECRET=YYYY
-FOD_TENANT=[YOUR-TENANT]
-FOD_USER=[YOUR-USERNAME]
-FOD_PAT=XXXX
-```
-
 ### SAST using Fortify SCA command line
 
-There is an example PowerShell script [sast-scan.ps1](bin/sast-scan.ps1) that you can use to execute static application security testing
-via [Fortify SCA](https://www.microfocus.com/en-us/products/static-code-analysis-sast/overview).
+This project includes a helper script `scan.ps1` to run an OpenText (Fortify) SCA translation and scan using the local Gradle build. The script packages, translates and runs a SAST scan and produces standard Fortify outputs (FPR, PDF). Use this script when you have a local Fortify SCA/OpenText SAST installation available.
 
-```PowerShell
-.\\bin\\sast-scan.ps1 -SkipSSC
+What you need
+
+- Fortify Static Code Analyzer / OpenText SCA tools installed and available on PATH (commands such as `sourceanalyzer`, `ReportGenerator` or `auditworkbench` should be callable).
+- PowerShell (Windows PowerShell or PowerShell Core/pwsh).
+- Java JDK 11 and a successful project build (the script runs Gradle build as part of the flow).
+
+Quick example
+
+Open a PowerShell prompt in the repository root and run:
+
+```powershell
+# Run the scan script which will build, translate and run a Fortify SCA scan
+.\scan.ps1
 ```
 
-This script runs a `sourceanalyzer` translation and scan on the project's source code. It creates a Fortify Project Results file called `IWA-Java.fpr`
-which you can open using the Fortify `auditworkbench` tool:
+What the script does (high level)
 
-```PowerShell
-auditworkbench.cmd .\IWA-Java.fpr
-```
+- Builds the project using Gradle (runs `./gradlew clean build -x test`).
+- Runs Fortify `sourceanalyzer` translation step to collect project source and compile data.
+- Runs the Fortify scan step to produce an FPR file (default name: `IWA-Java.fpr`).
+- Optionally generates a PDF report (if `ReportGenerator` is available).
 
-It also creates a PDF report called `IWA-Java.pdf` and optionally
-uploads the results to [Fortify Software Security Center](https://www.microfocus.com/en-us/products/software-security-assurance-sdlc/overview) (SSC).
+Configuration and common options
 
-In order to upload to SSC you will need to have entries in the `.env` similar to the following:
+- The script reads configuration values from `fortify.config` (if present) and may accept additional parameters. See the header of `scan.ps1` for available command-line options.
+- Common environment/config values you may need to set for upload to SSC or other tools are described elsewhere in this README (for example `SSC_URL`, `SSC_AUTH_TOKEN`, `SSC_APP_NAME`, `SSC_APP_VER_NAME`).
 
-```
-SSC_URL=http://localhost:8080/ssc
-SSC_AUTH_TOKEN=28145aad-c40d-426d-942b-f6d6aec9c56f
-SSC_APP_NAME=IWA-Java
-SSC_APP_VER_NAME=main
-```
+Typical outputs
 
-The `SSC_AUTH_TOKEN` entry should be set to the value of a 'CIToken' created in SSC _"Administration->Token Management"_.
+- `IWA-Java.fpr` — Fortify Project Results file containing SAST findings.
+- `IWA-Java.pdf` — (Optional) PDF report generated from the FPR if the report tool is installed.
+- Exit code 0 indicates a successful scan; non-zero indicates failures in build/translate/scan steps.
+
+Uploading results to Fortify Software Security Center (SSC)
+
+If you want the script to upload results to SSC you will need an SSC CI token and the `SSC_*` configuration entries set (see the SSC sections later in this README). After running the scan you can upload the FPR using the appropriate tool or the `fcli` utilities described elsewhere.
+
+Troubleshooting
+
+- If `sourceanalyzer` is not found, ensure your Fortify/OpenText SCA installation is correctly installed and the bin folder is on PATH.
+- The translation step may fail if the Gradle build fails; try running `./gradlew clean build` and fix any build issues first.
+- If the script fails while generating reports, ensure `ReportGenerator` (or `auditworkbench`) is installed and configured.
+
+See also
+
+- `fortify.config` — sample Fortify configuration used by the project scripts.
+- `scan.ps1` — the actual PowerShell script (open it to review supported flags and behaviour).
 
 ### SAST using Fortify ScanCentral SAST
 

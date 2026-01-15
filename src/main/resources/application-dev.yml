@@ -60,18 +60,18 @@ spring:
           audiences: https://iwa-api.onfortify.com
   mail:
     default-encoding: ${SPRING_MAIL_DEFAULT_ENCODING:UTF-8}
-    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
-    username: ${SPRING_MAIL_USERNAME:}
-    password: ${SPRING_MAIL_PASSWORD:}
-    port: ${SPRING_MAIL_PORT:587}
+    host: ${SPRING_MAIL_HOST:localhost}
+    username: ${SPRING_MAIL_USERNAME:username}
+    password: ${SPRING_MAIL_PASSWORD:password}
+    port: ${SPRING_MAIL_PORT:2525}
     test-connection: ${SPRING_MAIL_TEST_CONNECTION:false}
     debug: ${SPRING_MAIL_DEBUG:true}
     properties:
       mail:
         smtp:
-          auth: ${SPRING_MAIL_SMTP_AUTH:true}
+          auth: ${SPRING_MAIL_SMTP_AUTH:false}
           starttls:
-            enable: ${SPRING_MAIL_SMTP_STARTTLS_ENABLE:true}
+            enable: ${SPRING_MAIL_SMTP_STARTTLS_ENABLE:false}
 
   jwt:
     secret: eLgvVuw3qIHLNGNH/XNASMiV1RQlVgNakeDsLu7svKQP7jtu2+35wwu/rfwBAQi88wCiuCU66NS66BEySj6jQ4tLOJy4Jn5USbjBk98vMYnT+3me2lYqTUg/tdEg2HHMzhnu+MOXdq5LK1iwr0/uTob/meDy2cIT3ljF+8L7ZuxnwYYW0BTQsM+0nDTYNg4Ik/ChORRBjDyNpplzGvJlqvY5g2RkCyIP0WRe1A==

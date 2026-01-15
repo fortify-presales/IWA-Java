@@ -20,7 +20,7 @@ on:
 
 # Global environment variables
 env:
-  DEFAULT_APP_NAME: "IWA-Java"
+  DEFAULT_APP_NAME: "IWA-PharmacyDirect"
   DEFAULT_APP_URL: "https://iwa.onfortify.com"
   DEFAULT_PYTHON_VERSION: "3.12.3"
   DEFAULT_IMAGE_NAME: "fortifydocker/fortify-fast:24.2.ubuntu.2204"

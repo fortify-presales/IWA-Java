@@ -44,7 +44,7 @@ on:
 
 # Global environment variables
 env:
-  DEFAULT_APP_NAME: "IWA-Java"
+  DEFAULT_APP_NAME: "IWA-PharmacyDirect"
   GRADLE_VERSION: "7.6.4"
 
 jobs:

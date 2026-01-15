@@ -126,7 +126,10 @@ param(
     [switch]$AviatorAuditOnly,
     
     [Parameter(Mandatory=$false)]
-    [switch]$SSCUploadOnly
+    [switch]$SSCUploadOnly,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$WhatIfConfig
 )
 
 # Set error action preference
@@ -271,85 +274,235 @@ if (Test-Path $optsFile) {
     Write-Host "No options file found ($optsFile)" -ForegroundColor Gray
 }
 
-# Resolve SSC configuration with precedence: Environment Variables > Config File > Parameters
+# Add a helper to resolve configuration values with precedence: Parameters > Environment Variables > Config file
+function Resolve-ConfigValue {
+    param(
+        [string]$Name,
+        [string]$ParamValue,
+        [string[]]$EnvNames,
+        [string]$ConfigValue
+    )
+
+    # 1) Parameter (highest precedence)
+    if (-not [string]::IsNullOrEmpty($ParamValue)) {
+        return @{ Value = $ParamValue; Source = 'parameter' }
+    }
+
+    # 2) Environment variables (check in order)
+    foreach ($envName in $EnvNames) {
+        if ($envName) {
+            $v = (Get-Item -Path "Env:\$envName" -ErrorAction SilentlyContinue).Value
+            if (-not [string]::IsNullOrEmpty($v)) {
+                return @{ Value = $v; Source = "env:$envName" }
+            }
+        }
+    }
+
+    # 3) Config file
+    if (-not [string]::IsNullOrEmpty($ConfigValue)) {
+        return @{ Value = $ConfigValue; Source = 'config' }
+    }
+
+    return @{ Value = $null; Source = '<unset>' }
+}
+
+# Use Resolve-ConfigValue for SSC and Aviator settings
+$resolvedSources = @{}
+$resolvedValues = @{}
+
+$rc = Resolve-ConfigValue -Name 'SSCUrl' -ParamValue $SSCUrl -EnvNames @('SSC_URL') -ConfigValue $configSSCUrl
+$SSCUrl = $rc.Value
+$resolvedSources['SSCUrl'] = $rc.Source
+$resolvedValues['SSCUrl'] = $rc.Value
+
+$rc = Resolve-ConfigValue -Name 'SSCAuthToken' -ParamValue $SSCAuthToken -EnvNames @('SSC_AUTH_TOKEN') -ConfigValue $configSSCAuthToken
+$SSCAuthToken = $rc.Value
+$resolvedSources['SSCAuthToken'] = $rc.Source
+$resolvedValues['SSCAuthToken'] = $rc.Value
+
+$rc = Resolve-ConfigValue -Name 'SSCAppName' -ParamValue $SSCAppName -EnvNames @('SSC_APP_NAME') -ConfigValue $configAppName
+$AppName = $rc.Value
+$resolvedSources['SSCAppName'] = $rc.Source
+$resolvedValues['SSCAppName'] = $rc.Value
+
+$rc = Resolve-ConfigValue -Name 'SSCAppVersion' -ParamValue $SSCAppVersionName -EnvNames @('SSC_APP_VERSION_NAME') -ConfigValue $configAppVersion
+$AppVersion = $rc.Value
+$resolvedSources['SSCAppVersion'] = $rc.Source
+$resolvedValues['SSCAppVersion'] = $rc.Value
+
+$rc = Resolve-ConfigValue -Name 'AviatorUrl' -ParamValue $AviatorUrl -EnvNames @('AVIATOR_URL') -ConfigValue $configAviatorUrl
+$AviatorUrl = $rc.Value
+$resolvedSources['AviatorUrl'] = $rc.Source
+$resolvedValues['AviatorUrl'] = $rc.Value
+
+$rc = Resolve-ConfigValue -Name 'AviatorToken' -ParamValue $AviatorToken -EnvNames @('AVIATOR_TOKEN') -ConfigValue $configAviatorToken
+$AviatorToken = $rc.Value
+$resolvedSources['AviatorToken'] = $rc.Source
+$resolvedValues['AviatorToken'] = $rc.Value
+
+$rc = Resolve-ConfigValue -Name 'AviatorAppName' -ParamValue $AviatorAppName -EnvNames @('AVIATOR_APP_NAME') -ConfigValue $configAviatorAppName
+$AviatorAppName = $rc.Value
+$resolvedSources['AviatorAppName'] = $rc.Source
+$resolvedValues['AviatorAppName'] = $rc.Value
+
+# Centralized list of environment variable candidates checked for each logical key (used by the WhatIf preview)
+$envCandidates = @{
+    'SSCUrl'            = @('SSC_URL')
+    'SSCAuthToken'      = @('SSC_AUTH_TOKEN')
+    'SSCAppName'        = @('SSC_APP_NAME')
+    'SSCAppVersion'     = @('SSC_APP_VERSION_NAME')
+    'AviatorUrl'        = @('AVIATOR_URL')
+    'AviatorToken'      = @('AVIATOR_TOKEN')
+    'AviatorAppName'    = @('AVIATOR_APP_NAME')
+}
+
+# Helper to print environment variable checks (present/absent) for a given key
+function Print-EnvChecks {
+    param(
+        [string]$Key,
+        [string[]]$Candidates
+    )
+    foreach ($envName in $Candidates) {
+        if (-not $envName) { continue }
+        $e = Get-Item -Path "Env:\$envName" -ErrorAction SilentlyContinue
+        if ($e -and $e.Value -ne '') {
+            if ($PSBoundParameters.ContainsKey('Debug')) { $valShown = $e.Value } else { $valShown = '****(masked)' }
+            Write-Host ('    {0,-35} -> {1, -20} (present)' -f $envName, $valShown) -ForegroundColor DarkGreen
+        } else {
+            Write-Host ('    {0,-35} -> {1, -20} (absent)' -f $envName, '<not set>') -ForegroundColor DarkGray
+        }
+    }
+}
+
+# If user requested a WhatIf preview, print a table of resolved values and exit
+if ($WhatIfConfig) {
+    function MaskVal([string]$key, [string]$val) {
+        if (-not $val) { return '<not set>' }
+        if ($PSBoundParameters.ContainsKey('Debug')) { return $val }
+        $lk = $key.ToLower()
+        if ($lk -like '*token*' -or $lk -like '*auth*' -or $lk -like '*pass*' -or $lk -like '*secret*') { return '****(masked)' }
+        return $val
+    }
+
+    Write-Host "=== scan.ps1 Effective Configuration (WhatIf) ===" -ForegroundColor Yellow
+    $report = @()
+    # Core SSC/Aviator values
+    $report += [PSCustomObject]@{ Key = 'SSCUrl'; Value = MaskVal 'SSCUrl' $resolvedValues['SSCUrl']; Source = $resolvedSources['SSCUrl'] }
+    $report += [PSCustomObject]@{ Key = 'SSCAuthToken'; Value = MaskVal 'SSCAuthToken' $resolvedValues['SSCAuthToken']; Source = $resolvedSources['SSCAuthToken'] }
+    $report += [PSCustomObject]@{ Key = 'SSCAppName'; Value = MaskVal 'SSCAppName' $resolvedValues['SSCAppName']; Source = $resolvedSources['SSCAppName'] }
+    $report += [PSCustomObject]@{ Key = 'SSCAppVersion'; Value = MaskVal 'SSCAppVersion' $resolvedValues['SSCAppVersion']; Source = $resolvedSources['SSCAppVersion'] }
+    $report += [PSCustomObject]@{ Key = 'AviatorUrl'; Value = MaskVal 'AviatorUrl' $resolvedValues['AviatorUrl']; Source = $resolvedSources['AviatorUrl'] }
+    $report += [PSCustomObject]@{ Key = 'AviatorToken'; Value = MaskVal 'AviatorToken' $resolvedValues['AviatorToken']; Source = $resolvedSources['AviatorToken'] }
+    $report += [PSCustomObject]@{ Key = 'AviatorAppName'; Value = MaskVal 'AviatorAppName' $resolvedValues['AviatorAppName']; Source = $resolvedSources['AviatorAppName'] }
+
+    # Additional useful keys for preview
+    $report += [PSCustomObject]@{ Key = 'BuildId'; Value = MaskVal 'BuildId' $BuildId; Source = if ([string]::IsNullOrEmpty($BuildId)) { '<unset>' } else { 'parameter' } }
+    $report += [PSCustomObject]@{ Key = 'ProjectRoot'; Value = MaskVal 'ProjectRoot' $ProjectRoot; Source = 'parameter' }
+    $report += [PSCustomObject]@{ Key = 'VerboseOutput'; Value = if ($VerboseOutput) { 'True' } else { 'False' }; Source = 'parameter' }
+    $report += [PSCustomObject]@{ Key = 'DebugOutput'; Value = if ($DebugOutput) { 'True' } else { 'False' }; Source = 'parameter' }
+    $report += [PSCustomObject]@{ Key = 'UploadToSSC'; Value = if ($UploadToSSC) { 'True' } else { 'False' }; Source = 'parameter' }
+    $report += [PSCustomObject]@{ Key = 'AuditWithAviator'; Value = if ($AuditWithAviator) { 'True' } else { 'False' }; Source = 'parameter' }
+    $report += [PSCustomObject]@{ Key = 'SSCUploadOnly'; Value = if ($SSCUploadOnly) { 'True' } else { 'False' }; Source = 'parameter' }
+    $report += [PSCustomObject]@{ Key = 'AviatorAuditOnly'; Value = if ($AviatorAuditOnly) { 'True' } else { 'False' }; Source = 'parameter' }
+    $report += [PSCustomObject]@{ Key = 'FPRFile'; Value = ("$BuildId.fpr") ; Source = 'derived' }
+    $report += [PSCustomObject]@{ Key = 'TranslationOptions'; Value = if ($transOptions) { $transOptions } else { '<none>' }; Source = if ($transOptions) { 'config' } else { '<none>' } }
+    $report += [PSCustomObject]@{ Key = 'ScanOptions'; Value = if ($scanOptions) { $scanOptions } else { '<none>' }; Source = if ($scanOptions) { 'config' } else { '<none>' } }
+
+    $report | Format-Table -Property Key, Value, Source -AutoSize
+    Write-Host "Note: values containing 'token', 'auth', 'pass', or 'secret' are masked unless you pass -Debug." -ForegroundColor Yellow
+
+    # If verbose, print which environment variable names were checked for each logical key
+    if ($PSBoundParameters.ContainsKey('Verbose')) {
+        Write-Host "`nEnvironment variables checked (per key):" -ForegroundColor Yellow
+        foreach ($k in $envCandidates.Keys) {
+            $cands = $envCandidates[$k]
+            Write-Host ("- {0}:" -f $k) -ForegroundColor Cyan
+            Print-EnvChecks -Key $k -Candidates $cands
+        }
+    }
+
+    exit 0
+}
+
+# Resolve SSC configuration with precedence: Parameters > Environment Variables > Config File
 # SSC URL
-if (-not [string]::IsNullOrEmpty($env:SSC_URL)) {
+if (-not [string]::IsNullOrEmpty($SSCUrl)) {
+    Write-Host "Using SSC URL from parameter" -ForegroundColor Yellow
+} elseif (-not [string]::IsNullOrEmpty($env:SSC_URL)) {
     $SSCUrl = $env:SSC_URL
     Write-Host "Using SSC URL from environment variable" -ForegroundColor Yellow
 } elseif (-not [string]::IsNullOrEmpty($configSSCUrl)) {
     $SSCUrl = $configSSCUrl
     Write-Host "Using SSC URL from config file" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($SSCUrl)) {
-    Write-Host "Using SSC URL from parameter" -ForegroundColor Yellow
 }
 
 # SSC Auth Token
-if (-not [string]::IsNullOrEmpty($env:SSC_AUTH_TOKEN)) {
+if (-not [string]::IsNullOrEmpty($SSCAuthToken)) {
+    Write-Host "Using SSC Auth Token from parameter" -ForegroundColor Yellow
+} elseif (-not [string]::IsNullOrEmpty($env:SSC_AUTH_TOKEN)) {
     $SSCAuthToken = $env:SSC_AUTH_TOKEN
     Write-Host "Using SSC Auth Token from environment variable" -ForegroundColor Yellow
 } elseif (-not [string]::IsNullOrEmpty($configSSCAuthToken)) {
     $SSCAuthToken = $configSSCAuthToken
     Write-Host "Using SSC Auth Token from config file" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($SSCAuthToken)) {
-    Write-Host "Using SSC Auth Token from parameter" -ForegroundColor Yellow
 }
 
 # SSC App Name
-if (-not [string]::IsNullOrEmpty($env:SSC_APP_NAME)) {
+if (-not [string]::IsNullOrEmpty($SSCAppName)) {
+    $AppName = $SSCAppName
+    Write-Host "Using SSC App Name from parameter" -ForegroundColor Yellow
+} elseif (-not [string]::IsNullOrEmpty($env:SSC_APP_NAME)) {
     $AppName = $env:SSC_APP_NAME
     Write-Host "Using SSC App Name from environment variable" -ForegroundColor Yellow
 } elseif (-not [string]::IsNullOrEmpty($configAppName)) {
     $AppName = $configAppName
     Write-Host "Using SSC App Name from config file" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($SSCAppName)) {
-    $AppName = $SSCAppName
-    Write-Host "Using SSC App Name from parameter" -ForegroundColor Yellow
 }
 
 # SSC App Version
-if (-not [string]::IsNullOrEmpty($env:SSC_APP_VERSION_NAME)) {
+if (-not [string]::IsNullOrEmpty($SSCAppVersionName)) {
+    $AppVersion = $SSCAppVersionName
+    Write-Host "Using SSC App Version from parameter" -ForegroundColor Yellow
+} elseif (-not [string]::IsNullOrEmpty($env:SSC_APP_VERSION_NAME)) {
     $AppVersion = $env:SSC_APP_VERSION_NAME
     Write-Host "Using SSC App Version from environment variable" -ForegroundColor Yellow
 } elseif (-not [string]::IsNullOrEmpty($configAppVersion)) {
     $AppVersion = $configAppVersion
     Write-Host "Using SSC App Version from config file" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($SSCAppVersionName)) {
-    $AppVersion = $SSCAppVersionName
-    Write-Host "Using SSC App Version from parameter" -ForegroundColor Yellow
 }
 
-# Resolve Aviator configuration with precedence: Environment Variables > Config File > Parameters
+# Resolve Aviator configuration with precedence: Parameters > Environment Variables > Config File
 # Aviator URL
-if (-not [string]::IsNullOrEmpty($env:AVIATOR_URL)) {
+if (-not [string]::IsNullOrEmpty($AviatorUrl)) {
+    Write-Host "Using Aviator URL from parameter" -ForegroundColor Yellow
+} elseif (-not [string]::IsNullOrEmpty($env:AVIATOR_URL)) {
     $AviatorUrl = $env:AVIATOR_URL
     Write-Host "Using Aviator URL from environment variable" -ForegroundColor Yellow
 } elseif (-not [string]::IsNullOrEmpty($configAviatorUrl)) {
     $AviatorUrl = $configAviatorUrl
     Write-Host "Using Aviator URL from config file" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($AviatorUrl)) {
-    Write-Host "Using Aviator URL from parameter" -ForegroundColor Yellow
 }
 
 # Aviator Token
-if (-not [string]::IsNullOrEmpty($env:AVIATOR_TOKEN)) {
+if (-not [string]::IsNullOrEmpty($AviatorToken)) {
+    Write-Host "Using Aviator Token from parameter" -ForegroundColor Yellow
+} elseif (-not [string]::IsNullOrEmpty($env:AVIATOR_TOKEN)) {
     $AviatorToken = $env:AVIATOR_TOKEN
     Write-Host "Using Aviator Token from environment variable" -ForegroundColor Yellow
 } elseif (-not [string]::IsNullOrEmpty($configAviatorToken)) {
     $AviatorToken = $configAviatorToken
     Write-Host "Using Aviator Token from config file" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($AviatorToken)) {
-    Write-Host "Using Aviator Token from parameter" -ForegroundColor Yellow
 }
 
 # Aviator App Name
-if (-not [string]::IsNullOrEmpty($env:AVIATOR_APP_NAME)) {
+if (-not [string]::IsNullOrEmpty($AviatorAppName)) {
+    Write-Host "Using Aviator App Name from parameter" -ForegroundColor Yellow
+} elseif (-not [string]::IsNullOrEmpty($env:AVIATOR_APP_NAME)) {
     $AviatorAppName = $env:AVIATOR_APP_NAME
     Write-Host "Using Aviator App Name from environment variable" -ForegroundColor Yellow
 } elseif (-not [string]::IsNullOrEmpty($configAviatorAppName)) {
     $AviatorAppName = $configAviatorAppName
     Write-Host "Using Aviator App Name from config file" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($AviatorAppName)) {
-    Write-Host "Using Aviator App Name from parameter" -ForegroundColor Yellow
 }
 
 # Display resolved SSC configuration if uploading

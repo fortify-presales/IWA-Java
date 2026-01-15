@@ -2,7 +2,7 @@ FROM eclipse-temurin:17
 # A JDK 1.8 is needed if the WebInspect Runtime Agent is being used
 #FROM openjdk:8u342-jdk-slim
 
-LABEL maintainer="klee2@opentext.com"
+LABEL maintainer="info@opentext.com"
 
 # Add a volume pointing to /tmp
 VOLUME /tmp
