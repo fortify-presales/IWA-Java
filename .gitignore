@@ -35,3 +35,4 @@ gradle.debricked.lock
 sc.gradle.debricked.lock
 debricked.fingerprints.txt
 fcli.env
+/tools/ps_syntax_check.ps1
