@@ -25,7 +25,7 @@ on:
   workflow_dispatch:
 
 env:
-  DEFAULT_APP_NAME: "IWA-PharmacyDirect"
+  DEFAULT_APP_NAME: "IWA-Java"
   DEFAULT_PARENT_RELEASE_NAME: "main"
   GRADLE_VERSION: "7.6.4"
   JAVA_VERSION: "17"

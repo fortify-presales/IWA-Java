@@ -61,7 +61,7 @@ on:
 
 # Global environment variables
 env:
-  DEFAULT_APP_NAME: "IWA-PharmacyDirect"
+  DEFAULT_APP_NAME: "IWA-Java"
   DEFAULT_PARENT_RELEASE_NAME: "main"
   GRADLE_VERSION: "7.6.4"
   JAVA_VERSION: "17"
@@ -82,12 +82,12 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "Running in a pull request pipeline ..."
-            echo "FOD_RELEASE=${{ env.DEFAULT_APP_NAME }}:merge-to-${{ github.base_ref }}#PR${{ github.event.number }}" >> $GITHUB_OUTPUT
-            echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}:${{ github.head_ref }}" >> $GITHUB_OUTPUT
+            echo "FOD_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ vars.FOD_APP_NAME_POSTFIX }}:merge-to-${{ github.base_ref }}#PR${{ github.event.number }}" >> $GITHUB_OUTPUT
+            echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ vars.FOD_APP_NAME_POSTFIX }}:${{ github.head_ref }}" >> $GITHUB_OUTPUT
           else
             echo "Running in a branch pipeline ..."
-            echo "FOD_RELEASE=${{ env.DEFAULT_APP_NAME }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
-            echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}:${{ env.DEFAULT_PARENT_RELEASE_NAME }}" >> $GITHUB_OUTPUT
+            echo "FOD_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ vars.FOD_APP_NAME_POSTFIX }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ vars.FOD_APP_NAME_POSTFIX }}:${{ env.DEFAULT_PARENT_RELEASE_NAME }}" >> $GITHUB_OUTPUT
           fi 
 
   FoD-SAST-Scan:
@@ -162,7 +162,6 @@ jobs:
           FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
           FOD_RELEASE: ${{ env.FOD_RELEASE }}
 
-  yaml
   Verify-Security-Policy:
     runs-on: ubuntu-latest
     if: ${{ always() }}

@@ -29,7 +29,7 @@ on:
 # Global environment variables
 env:
   DEFAULT_ORG_NAME: "fortify-presales"
-  DEFAULT_APP_NAME: "IWA-PharmacyDirect"
+  DEFAULT_APP_NAME: "IWA-Java"
   GRADLE_VERSION: "7.6.4"
 
 jobs:
