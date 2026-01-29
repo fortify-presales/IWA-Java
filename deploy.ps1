@@ -14,7 +14,7 @@
 .PARAMETER AppName
   Azure Web App name.
 .PARAMETER ImageName
-  Local image name (repository portion). Example: iwa or myapp/iwa.
+  Local image name (repository portion). Example: iwajava or myapp/iwajava.
 .PARAMETER Tag
   Image tag to use (default: latest).
 .PARAMETER Location
@@ -28,7 +28,7 @@
 .PARAMETER Dockerfile
   Path to Dockerfile to use when building (default: Dockerfile in current directory).
 .EXAMPLE
-  ./deploy.ps1 -ResourceGroup my-rg -AcrName myacr -AppName myapp -ImageName iwa -Build
+  ./deploy.ps1 -ResourceGroup my-rg -AcrName myacr -AppName myapp -ImageName iwajava -Build
 #>
 
 [CmdletBinding()]
@@ -334,63 +334,82 @@ if (-not $AcrLoginServer) { Fail "ACR '$AcrName' not found in the current subscr
 # Construct the final image reference to push/use in Azure. Avoid double-prefixing if ImageName already contains a registry host.
 $normalizedImageName = $ImageName
 if ($AcrLoginServer -and $ImageName) {
-    $lcAcr = $AcrLoginServer.ToLower()
-    $lcImage = $ImageName.ToLower()
-    if ($lcImage.StartsWith($lcAcr + '/')) {
-        # ImageName already has the ACR login server prefix (e.g. "iwadevuks.azurecr.io/iwa") -> use as-is
-        $normalizedImageName = $ImageName
-    } elseif ($lcImage -match '^[^/]+\.azurecr\.io/') {
-        # ImageName appears to reference an Azure CR host already -> use as-is
-        $normalizedImageName = $ImageName
+    # Normalize incoming image name and remove any leading protocol (http:// or https://)
+    $img = ($ImageName -as [string]).Trim()
+    $img = $img -replace '^\s*https?://',''
+
+    # Lower-cased forms for comparisons (safe on Windows filesystem)
+    $lcImg = $img.ToLower()
+    $lcAcr = ($AcrLoginServer -as [string]).ToLower()
+
+    # If the image appears to reference an Azure Container Registry host already
+    if ($lcImg -match '^[^/]+\.azurecr\.io/') {
+        # If it specifically starts with our ACR (possibly duplicated), collapse any leading occurrences and re-prefix exactly once
+        if ($lcAcr -and $lcImg.StartsWith($lcAcr + '/')) {
+            # Remove any leading occurrences of our ACR host (case-insensitive), then re-prefix once
+            # Match one-or-more occurrences of 'acrLoginServer/' at the start (e.g. 'host/host/...')
+            $pattern = '^(?:' + [regex]::Escape($AcrLoginServer) + '/)+'
+            $img = [regex]::Replace($img, $pattern, '', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            $img = $img.TrimStart('/')
+            $normalizedImageName = "$AcrLoginServer/$img"
+        } else {
+            # Image references some ACR host (different one) -> use as-is
+            $normalizedImageName = $img
+        }
     } else {
-        # Prefix with the ACR login server
-        $normalizedImageName = "$AcrLoginServer/$ImageName"
+        # No registry present -> prefix with our ACR login server
+        $normalizedImageName = "$AcrLoginServer/$img"
     }
+} else {
+    # If ACR login server or ImageName is not available, fall back to the provided ImageName
+    $normalizedImageName = $ImageName
 }
 
 $acrImage = "${normalizedImageName}:$Tag"
 
-# Obtain ACR credentials up-front (used for docker login fallback and later webapp config)
-if ($AcrUser -and $AcrPass) {
-    Write-Host "Using provided ACR credentials from environment/config/CLI." -ForegroundColor Cyan
-    $acrUser = $AcrUser
-    $acrPass = $AcrPass
-} else {
-    $acrUser = (& az acr credential show -n $AcrName --query username -o tsv) 2>$null
-    $acrPass = (& az acr credential show -n $AcrName --query "passwords[0].value" -o tsv) 2>$null
-}
-
-# Login to ACR: prefer 'az acr login' which configures Docker credential helper, but fall back to 'docker login' if it fails
-Info "Attempting 'az acr login' for ACR '$AcrName'..."
-& az acr login -n $AcrName > $null
-if ($LASTEXITCODE -ne 0) {
-    Info "'az acr login' failed; attempting 'docker login' using ACR credentials if available..."
-    if ($acrUser -and $acrPass) {
-        $dl = docker login $AcrLoginServer -u $acrUser -p $acrPass 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Info "'docker login' with retrieved ACR credentials failed: $dl"
-        } else {
-            Info "Docker login succeeded using ACR credentials."
-        }
-    } else {
-        Info "ACR credentials not available. Trying 'az acr login --expose-token'..."
-        $token = (& az acr login -n $AcrName --expose-token --output tsv --query accessToken) 2>$null
-        if ($token) {
-            # Use the well-known service principal username for token login
-            $tokenUser = '00000000-0000-0000-0000-000000000000'
-            $dl = docker login $AcrLoginServer -u $tokenUser -p $token 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                Info "Docker login using exposed token failed: $dl"
-            } else {
-                Info "Docker login succeeded using exposed token."
-            }
-        } else {
-            Info "Failed to obtain an access token from 'az acr login --expose-token'."
+# Derive repo-only image by removing any leading occurrences of the ACR login server (case-insensitive).
+# This handles cases where the image was accidentally double-prefixed like 'host/host/repo:tag'.
+$imageRepoTag = $acrImage
+if ($AcrLoginServer) {
+    $pattern = '^(?:' + [regex]::Escape($AcrLoginServer) + '/)+'
+    try {
+        $imageRepoTag = [regex]::Replace($imageRepoTag, $pattern, '', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    } catch {
+        # Fallback to simple StartsWith removal if regex replacement fails for any reason
+        $prefix = "$AcrLoginServer/"
+        if ($imageRepoTag.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $imageRepoTag = $imageRepoTag.Substring($prefix.Length)
         }
     }
-    # Re-check whether docker is logged in by attempting to tag (will fail later if not)
-} else {
-    Info "'az acr login' succeeded."
+}
+
+# Helper: remove any leading registry host (any first path component containing '.' or ':' or 'localhost')
+function Remove-RegistryPrefix([string]$img) {
+    if (-not $img) { return $img }
+    $s = $img.Trim()
+    # Strip leading protocol if present
+    $s = $s -replace '^\s*https?://',''
+    $parts = $s -split '/', 2
+    if ($parts.Length -gt 1) {
+        $first = $parts[0]
+        if ($first -match '\.' -or $first -match ':' -or $first -ieq 'localhost') {
+            return $parts[1]
+        }
+    }
+    return $s
+}
+
+# imageRepoForAzure is the repository[:tag] that we will pass to the Azure CLI when also supplying --container-registry-url
+# ensuring Azure does not double-prefix the registry host.
+$imageRepoForAzure = Remove-RegistryPrefix $imageRepoTag
+
+# Debug output when running with -Debug
+if ($PSBoundParameters.ContainsKey('Debug')) {
+    Write-Host "[DEBUG] AcrLoginServer: $AcrLoginServer" -ForegroundColor DarkCyan
+    Write-Host "[DEBUG] normalizedImageName: $normalizedImageName" -ForegroundColor DarkCyan
+    Write-Host "[DEBUG] acrImage: $acrImage" -ForegroundColor DarkCyan
+    Write-Host "[DEBUG] imageRepoTag: $imageRepoTag" -ForegroundColor DarkCyan
+    Write-Host "[DEBUG] imageRepoForAzure: $imageRepoForAzure" -ForegroundColor DarkCyan
 }
 
 # Tag and push
@@ -462,7 +481,8 @@ if ($LASTEXITCODE -ne 0) {
     if ($isLinuxPlan -and $acrImage) {
         Info "Creating a Linux Web App with container image supplied to 'az webapp create'..."
         # Use the newer container image create-time options where supported to avoid deprecation warnings later.
-        $createArgs += @('--container-image-name',$acrImage)
+        # Pass repository:tag (without registry host) together with --container-registry-url so Azure doesn't double-prefix the registry.
+        $createArgs += @('--container-image-name',$imageRepoForAzure)
         # If registry info is available, pass it so Azure can pull the image (use newer container-registry flags)
         if ($AcrLoginServer) { $createArgs += @('--container-registry-url',"https://$AcrLoginServer") }
         if ($acrUser) { $createArgs += @('--container-registry-user',$acrUser) }
@@ -492,7 +512,9 @@ if ($LASTEXITCODE -ne 0) {
         } else {
             $containerInfoStr = $containerInfo | Out-String
             # Check whether the configured container info contains the image reference we expected
-            if (-not ($containerInfoStr -match [regex]::Escape($acrImage))) {
+            # Azure may store the image as either fully-qualified or repo-only depending on how it was supplied.
+            # Check for either form: the fully-qualified $acrImage OR the repo-only $imageRepoTag.
+            if (-not ($containerInfoStr -match [regex]::Escape($acrImage) -or $containerInfoStr -match [regex]::Escape($imageRepoTag))) {
                 Write-Host "Container image '$acrImage' not found in the web app's container configuration. Applying configuration now..." -ForegroundColor Yellow
                 $configuredOnCreate = $false
             } else {
@@ -503,7 +525,8 @@ if ($LASTEXITCODE -ne 0) {
         # If verification failed above, attempt to apply the container config now and confirm success
         if (-not $configuredOnCreate) {
             Write-Host "Applying container settings via 'az webapp config container set' as a fallback..." -ForegroundColor Yellow
-            $setArgs = @('webapp','config','container','set','-g',$ResourceGroup,'-n',$AppName,'--container-image-name',$acrImage)
+            # When configuring with a separate registry URL, pass repo:tag (without registry host) to avoid duplication
+            $setArgs = @('webapp','config','container','set','-g',$ResourceGroup,'-n',$AppName,'--container-image-name',$imageRepoForAzure)
             if ($AcrLoginServer) { $setArgs += @('--container-registry-url',"https://$AcrLoginServer") }
             if ($acrUser) { $setArgs += @('--container-registry-user',$acrUser) }
             if ($acrPass) { $setArgs += @('--container-registry-password',$acrPass) }
@@ -521,8 +544,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Step 7: configure container
-Write-Host "[7/8] Configuring Web App container settings..." -ForegroundColor Yellow
-
 # Configure the web app container to use the image from ACR
 Info "Configuring Web App container settings..."
 # If the app was configured at create time with the container image, skip the separate config step
@@ -531,10 +552,10 @@ if ($configuredOnCreate) {
 } else {
     # Use the newer az options (container-image-name / container-registry-url / container-registry-user / container-registry-password)
     & az webapp config container set -g $ResourceGroup -n $AppName `
-        --container-image-name $acrImage `
-        --container-registry-url "https://$AcrLoginServer" `
-        --container-registry-user $acrUser `
-        --container-registry-password $acrPass | Out-Null
+        --container-image-name $imageRepoForAzure `
+         --container-registry-url "https://$AcrLoginServer" `
+         --container-registry-user $acrUser `
+         --container-registry-password $acrPass | Out-Null
     if ($LASTEXITCODE -ne 0) { Fail "Failed to configure Web App container settings." }
     Write-Host "Web App container configuration applied." -ForegroundColor Green
 }
@@ -643,4 +664,3 @@ if ($WaitFor.IsPresent) {
     }
     if ((Get-Date) -ge $endTime) { Fail "Timed out waiting for Web App to become 'Running' after $WaitTimeoutSeconds seconds." }
 }
-

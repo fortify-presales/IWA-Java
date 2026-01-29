@@ -26,9 +26,9 @@ services:
       - iwa-net
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
-  iwa:
-    image: iwa:latest
-    container_name: iwa
+  iwajava:
+    image: iwajava:latest
+    container_name: iwajava
     #depends_on:
     #  - greenmail
     restart: always
@@ -47,7 +47,7 @@ services:
       - |
         while true; do
           if [ "$$(date +'%H:%M')" = '23:00' ]; then
-            docker restart iwa
+            docker restart iwajava
           fi
           sleep 60
         done

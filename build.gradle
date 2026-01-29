@@ -96,21 +96,21 @@ dependencyLocking { lockAllConfigurations() }
 
 apply plugin: 'io.spring.dependency-management'
 
-def props = new Properties()
-def propertiesFile = project.file('.env')
-if (!propertiesFile.exists()) {
-    props.setProperty('APP_NAME', 'iwa')
-    props.setProperty('APP_VER_NAME', '1.0')
-    Writer writer = new FileWriter(propertiesFile, false)
-    props.store(writer, "Change these variables to relevant values. Don't commit this file to source control.")
-    writer.close()
-}
-props.load(propertiesFile.newDataInputStream())
+//def props = new Properties()
+//def propertiesFile = project.file('.env')
+//if (!propertiesFile.exists()) {
+//    props.setProperty('APP_NAME', 'iwa-java')
+//    props.setProperty('APP_VER_NAME', '1.0')
+//    Writer writer = new FileWriter(propertiesFile, false)
+//    props.store(writer, "Change these variables to relevant values. Don't commit this file to source control.")
+//    writer.close()
+//}
+//props.load(propertiesFile.newDataInputStream())
 
-project.archivesBaseName = 'iwa'
+project.archivesBaseName = 'iwa-java'
 group = 'com.microfocus.example'
 version = '1.0'
-description = 'IWA (Insecure Web App) Pharmacy Direct - an insecure web application for use in Fortify demonstrations'
+description = 'An insecure Java/Spring web application for use in DevSecOps scenarios.'
 sourceCompatibility = JavaVersion.VERSION_11
 targetCompatibility = JavaVersion.VERSION_11
 

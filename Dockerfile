@@ -14,7 +14,7 @@ EXPOSE 8080
 #ARG WI_AGENT_DIR=/installs/Fortify_WebInspect_Runtime_Agent_Java/
 
 # The application's jar file
-ARG JAR_FILE=build/libs/iwa-1.0.jar
+ARG JAR_FILE=build/libs/iwa-java-1.0.jar
 
 # Copy Fortify WebInspect Runtime Agent directory to the container - uncomment if required
 #COPY ${WI_AGENT_DIR} /wirtagent
