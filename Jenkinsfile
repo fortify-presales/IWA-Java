@@ -43,7 +43,7 @@ pipeline {
 
     environment {
         // Application settings
-        APP_NAME = "iwa"                              // Short form component name
+        APP_NAME = "iwa-java"                              // Short form component name
         APP_VERSION = "1.0"                           // Short form component version
         GIT_URL = scm.getUserRemoteConfigs()[0].getUrl()    // Git Repo
         GIT_REPO_NAME = GIT_URL.split('/').last().replace('.git', '') // Git Repo name
@@ -56,7 +56,7 @@ pipeline {
 
         // The following are defaulted and can be overriden by creating a "Build parameter" of the same name
         // You can update this Jenkinsfile and set defaults here for internal pipelines
-        APP_URL = "${params.APP_URL ?: 'https://iwa.onfortify.com'}" // URL of application to be tested by ScanCentral DAST
+        APP_URL = "${params.APP_URL ?: 'https://iwajava.azurewebsites.net'}" // URL of application to be tested by ScanCentral DAST
         FOD_URL = "${params.FOD_URL ?: 'https://api.emea.fortify.com'}" // URL of Fortify on Demand
         FORTIFY_APP_NAME_POSTFIX = "${params.FORTIFY_APP_NAME_POSTFIX ?: ''}" // Fortify on Demand application name postfix
         FOD_RELEASE_ID = "${params.FOD_RELEASE_ID ?: '0'}" // Fortify on Demand release id

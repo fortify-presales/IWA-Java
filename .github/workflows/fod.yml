@@ -57,7 +57,7 @@ on:
       runFoDDASTScan:
         description: 'Carry out DAST scan using Fortify on Demand'
         required: false
-        default: 'false'     
+        default: 'true'
 
 # Global environment variables
 env:
@@ -69,6 +69,13 @@ env:
 
 jobs:
 
+  #
+  # The Env-Prepare job is responsible for setting up the environment variables that will be used in the subsequent jobs.
+  # It checks whether the workflow is running in the context of a pull request or a branch push and sets the FOD_RELEASE
+  # and FOD_PARENT_RELEASE variables accordingly. For pull requests, it constructs the release name to indicate that
+  # it's a merge to the base branch, while for branch pushes, it uses the branch name directly. This setup allows the
+  # SAST and DAST scan jobs to reference the correct release information when they run.
+  #
   Env-Prepare:
     runs-on: ubuntu-latest
     outputs:
@@ -90,6 +97,14 @@ jobs:
             echo "FOD_PARENT_RELEASE=${{ env.DEFAULT_APP_NAME }}${{ vars.FOD_APP_NAME_POSTFIX }}:${{ env.DEFAULT_PARENT_RELEASE_NAME }}" >> $GITHUB_OUTPUT
           fi 
 
+  #
+  # The FoD-SAST-Scan job is designed to run for push and pull request events, as well as when manually triggered via
+  # workflow_dispatch with the runFoDSASTScan input set to true. This allows for flexibility in when SAST scans are
+  # executed, ensuring that they can be run automatically on relevant events while also giving users the option to
+  # trigger them manually when needed. The job will use the Fortify GitHub Action to perform a SAST scan on the
+  # codebase, and it will be configured to wait for the scan to complete before proceeding to the next steps in the
+  # workflow.
+  #
   FoD-SAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runFoDSASTScan == 'true') }}
@@ -132,6 +147,14 @@ jobs:
           DO_PR_COMMENT: true
           DO_EXPORT: true
 
+  #
+  # The FoD-DAST-Scan job is designed to run only for push events on the default branch (e.g. main) and only if the user
+  # has explicitly chosen to run it via the workflow_dispatch inputs. This is because DAST scans can be time-consuming
+  # and may not be necessary for every pull request or branch. By limiting it to the default branch, we ensure that we
+  # are only running DAST scans on code that is being merged into the main line of development. The job will use the
+  # Fortify CLI to start a DAST scan for the release that was prepared in the Env-Prepare job, and it will wait for the
+  # scan to complete before proceeding.
+  #
   FoD-DAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.ref_name == github.event.repository.default_branch) && (github.event.inputs.runFoDDASTScan == 'true') }}
@@ -162,6 +185,13 @@ jobs:
           FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
           FOD_RELEASE: ${{ env.FOD_RELEASE }}
 
+  #
+  # The Verify-Security-Policy job is designed to run after the SAST and DAST scans have completed. It will wait for the
+  # DAST scan to finish if it was triggered, and then it will run the Fortify policy check action. The policy check will
+  # evaluate the results of both the SAST and DAST scans against the defined security policies in Fortify on Demand.
+  # The continue-on-error: true setting allows the workflow to proceed even if the policy check fails, which can be
+  # useful for reporting purposes without blocking the entire workflow.
+  #
   Verify-Security-Policy:
     runs-on: ubuntu-latest
     if: ${{ always() }}
@@ -208,8 +238,7 @@ jobs:
           if [ $attempt -ge $max_attempts ]; then
             echo "Timed out waiting for FoD-DAST-Scan; continuing anyway."
           fi
-
-      - name: Run Fortify on Demand SAST Scan
+      - name: Run Check Policy Action
         uses: fortify/github-action@v2
         with:
           sast-scan: false
