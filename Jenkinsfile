@@ -129,7 +129,7 @@ pipeline {
                         sh """
                             curl -L https://github.com/fortify/fcli/releases/download/latest/fcli-linux.tgz | tar -xz fcli
                             export FOD_RELEASE="${env.GITHUB_REPOSITORY}:${env.GITHUB_BRANCH}"
-                            ./fcli fod action run ci
+                            ./fcli action run ci
                         """
                        
                         // uncomment below to use Fortify on Demand Jenkins Plugin
