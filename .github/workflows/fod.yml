@@ -12,7 +12,7 @@
 #   API Key credentials can be obtained from your FoD tenant, under Administration -> Settings -> API
 #   It is recommended to create credentials with 'Security Lead' Role selected.
 #   "Automated Audit preference" should be configured for the release's Static Scan Settings.
-name: Security Scan with OpenText Application Security (FoD)
+name: OpenText Core Application Security Scan
 
 # Set default permissions for the GITHUB_TOKEN
 permissions:

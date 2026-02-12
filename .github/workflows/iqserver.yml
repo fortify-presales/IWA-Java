@@ -39,6 +39,8 @@ jobs:
   Sonatype-IQ-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runIQScan == 'true') }}
+    permissions:
+      security-events: write # for GitHub Advanced Security integration, if desired
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,8 +55,14 @@ jobs:
           iq-server-url: ${{ vars.IQ_SERVER_URL }}
           username: ${{ secrets.IQ_SERVER_USERNAME }}
           password: ${{ secrets.IQ_SERVER_PASSWORD }}
-          application-id: ${{ secrets.IQ_SERVER_APPLICATION_ID }}
+          application-id: ${{ vars.IQ_SERVER_APPLICATION_ID }}
           scan-targets: build.gradle
+          # for GitHub Advanced Security integration, you can optionally upload the results as SARIF to be displayed natively in GitHub. This requires that you have set up the appropriate permissions for the workflow and that you have configured the Sonatype application to allow SARIF uploads.
+          #upload-sarif-file: true
+          # other input parameters could be provided here
+          #enable-reachability: true
+          #reachability-namespaces: 'com.example.library.one com.example.app.two'
+          # more input parameters may follow
       # Just print the results for demonstration purposes, in a real workflow you would likely want to fail the build if the policy evaluation fails or upload the results to another system such as SSC.
       - name: Print Results
         run: |
