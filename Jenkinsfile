@@ -64,8 +64,8 @@ pipeline {
         // The following are "set" for use in `fcli action run ci`
         GITHUB_SHA = sh (script: "git rev-parse HEAD", returnStdout: true).trim()
         GITHUB_REPOSITORY = "${env.GIT_REPO_NAME}${env.FORTIFY_APP_NAME_POSTFIX}"
-        GITHUB_REF_NAME = "jenkins" // Hardcoded for testing
-        //GITHUB_REF_NAME = sh (script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+        GITHUB_REF_NAME = sh (script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+        GITHUB_BRANCH = "${params.FOD_APPVER_NAME ?: ${env.GIT_REF_NAME}"
     }  
 
     //tools {
@@ -117,7 +117,7 @@ pipeline {
                         sh """
                             echo "GITHUB_SHA: ${env.GITHUB_SHA}"
                             echo "GITHUB_REPOSITORY: ${env.GITHUB_REPOSITORY}"
-                            echo "GITHUB_REF_NAME: ${env.GITHUB_REF_NAME}"
+                            echo "GITHUB_BRANCH: ${env.GITHUB_BRANCH}"
                             echo "FOD_URL: ${env.FOD_URL}"
                             echo "FOD_CLIENT_ID: ${env.FOD_CLIENT_ID}"
                             echo "FOD_CLIENT_SECRET: ${env.FOD_CLIENT_SECRET}"
@@ -208,7 +208,7 @@ pipeline {
                             curl -L https://github.com/fortify/fcli/releases/download/latest/fcli-linux.tgz | tar -xz fcli
                             echo "Running DAST scan against: ${env.APP_URL}"
                             ./fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
-                            echo ./fcli fod dast-scan start --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins --store curScan
+                            echo ./fcli fod dast-scan start --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_BRANCH}" --fod-session jenkins --store curScan
                             echo ./fcli fod dast-scan wait-for ::curScan:: --fod-session jenkins
                             ./fcli fod session logout --fod-session jenkins
                         """
@@ -228,7 +228,7 @@ pipeline {
                         curl -L https://github.com/fortify/fcli/releases/download/latest/fcli-linux.tgz | tar -xz fcli
                         echo "Running gate check"
                         ./fcli fod session login --client-id ${env.FOD_CLIENT_ID} --client-secret ${env.FOD_CLIENT_SECRET} --url ${env.FOD_URL} --fod-session jenkins
-                        ./fcli fod action run check-policy --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_REF_NAME}" --fod-session jenkins
+                        ./fcli fod action run check-policy --release "${env.GITHUB_REPOSITORY}:${env.GITHUB_BRANCH}" --fod-session jenkins
                         ./fcli fod session logout --fod-session jenkins
                     """
                     //input id: 'Release',
