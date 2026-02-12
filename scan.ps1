@@ -1,4 +1,3 @@
-#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     OpenText SAST (Fortify Static Code Analyzer) local scan script
@@ -10,21 +9,14 @@
     3. Perform the scan
     4. Summarize issues using FPRUtility
     5. Optionally upload FPR to Fortify Software Security Center
-    6. Optionally audit results using Fortify Aviator
     The script supports reading additional options from a fortify.config file.
-    This file can contain [translation], [scan], [ssc], and [aviator] sections for respective options.
+    This file can contain [translation], [scan] and [ssc] sections for respective options.
 
 .PARAMETER BuildId
     The build ID for OpenText SAST (default: current directory name)
 
 .PARAMETER ProjectRoot
     The project root directory for OpenText SAST (default: .fortify)
-
-.PARAMETER VerboseOutput
-    Enable verbose output for OpenText SAST
-
-.PARAMETER DebugOutput
-    Enable debug output for OpenText SAST
 
 .PARAMETER UploadToSSC
     Upload the generated FPR file to Fortify Software Security Center
@@ -41,42 +33,24 @@
 .PARAMETER SSCAppVersionName
     SSC Application Version Name (can also be set via SSC_APP_VERSION_NAME environment variable or config file)
 
-.PARAMETER AuditWithAviator
-    Audit the results using Fortify Aviator
-
-.PARAMETER AviatorUrl
-    Fortify Aviator URL (can also be set via AVIATOR_URL environment variable or config file)
-
-.PARAMETER AviatorToken
-    Aviator Authentication Token (can also be set via AVIATOR_TOKEN environment variable or config file)
-
-.PARAMETER AviatorAppName
-    Aviator Application Name (can also be set via AVIATOR_APP_NAME environment variable or config file)
-
-.PARAMETER AviatorAuditOnly
-    Skip all scan steps and only run Aviator audit (requires existing SSC results)
-
 .PARAMETER SSCUploadOnly
     Skip all scan steps and only upload existing FPR to SSC
 
+.NOTES
+    This script uses PowerShell common parameters -Verbose and -Debug. To enable verbose/debug output use the built-in switches (e.g. -Verbose -Debug).
+
 .EXAMPLE
     .\scan.ps1
-    
+
 .EXAMPLE
-    .\scan.ps1 -BuildId "my-build" -VerboseOutput -DebugOutput
-    
+    .\scan.ps1 -BuildId "my-build" -Verbose -Debug
+
 .EXAMPLE
     .\scan.ps1 -UploadToSSC
-    
+
 .EXAMPLE
     .\scan.ps1 -UploadToSSC -SSCUrl "https://ssc.company.com/ssc" -SSCAuthToken "token123" -SSCAppName "MyApp" -SSCAppVersionName "1.0"
-    
-.EXAMPLE
-    .\scan.ps1 -UploadToSSC -AuditWithAviator
-    
-.EXAMPLE
-    .\scan.ps1 -AviatorAuditOnly
-    
+
 .EXAMPLE
     .\scan.ps1 -SSCUploadOnly
 #>
@@ -88,12 +62,6 @@ param(
     
     [Parameter(Mandatory=$false)]
     [string]$ProjectRoot = ".fortify",
-    
-    [Parameter(Mandatory=$false)]
-    [switch]$VerboseOutput,
-    
-    [Parameter(Mandatory=$false)]
-    [switch]$DebugOutput,
     
     [Parameter(Mandatory=$false)]
     [switch]$UploadToSSC,
@@ -109,21 +77,6 @@ param(
     
     [Parameter(Mandatory=$false)]
     [string]$SSCAppVersionName = "",
-    
-    [Parameter(Mandatory=$false)]
-    [switch]$AuditWithAviator,
-    
-    [Parameter(Mandatory=$false)]
-    [string]$AviatorUrl = "",
-    
-    [Parameter(Mandatory=$false)]
-    [string]$AviatorToken = "",
-    
-    [Parameter(Mandatory=$false)]
-    [string]$AviatorAppName = "",
-    
-    [Parameter(Mandatory=$false)]
-    [switch]$AviatorAuditOnly,
     
     [Parameter(Mandatory=$false)]
     [switch]$SSCUploadOnly,
@@ -180,8 +133,9 @@ catch {
 
 # Build command arguments
 $baseArgs = "`"-Dcom.fortify.sca.ProjectRoot=$ProjectRoot`" -b $BuildId"
-$verboseArg = if ($VerboseOutput) { "-verbose" } else { "" }
-$debugArg = if ($DebugOutput) { "-debug" } else { "" }
+# Use PowerShell built-in common parameters -Verbose and -Debug to control extra analyzer flags
+$verboseArg = if ($PSBoundParameters.ContainsKey('Verbose') -or $VerbosePreference -eq 'Continue') { "-verbose" } else { "" }
+$debugArg = if ($PSBoundParameters.ContainsKey('Debug') -or $DebugPreference -eq 'Continue') { "-debug" } else { "" }
 
 # Read options from fortify.config if it exists
 $optsFile = "fortify.config"
@@ -191,9 +145,6 @@ $configSSCUrl = ""
 $configSSCAuthToken = ""
 $configAppName = ""
 $configAppVersion = ""
-$configAviatorUrl = ""
-$configAviatorToken = ""
-$configAviatorAppName = ""
 
 if (Test-Path $optsFile) {
     Write-Host "Reading options from $optsFile..." -ForegroundColor Yellow
@@ -247,18 +198,6 @@ if (Test-Path $optsFile) {
                 $configAppVersion = $matches[1].Trim('"')
             }
         }
-        elseif ($currentSection -eq "aviator") {
-            # Parse Aviator configuration options
-            if ($line -match '^AviatorUrl\s*=\s*(.+)$') {
-                $configAviatorUrl = $matches[1].Trim('"')
-            }
-            elseif ($line -match '^AviatorToken\s*=\s*(.+)$') {
-                $configAviatorToken = $matches[1].Trim('"')
-            }
-            elseif ($line -match '^AviatorAppName\s*=\s*(.+)$') {
-                $configAviatorAppName = $matches[1].Trim('"')
-            }
-        }
     }
     
     $transOptions = $transOptionsList -join " "
@@ -306,7 +245,7 @@ function Resolve-ConfigValue {
     return @{ Value = $null; Source = '<unset>' }
 }
 
-# Use Resolve-ConfigValue for SSC and Aviator settings
+# Use Resolve-ConfigValue for SSC settings
 $resolvedSources = @{}
 $resolvedValues = @{}
 
@@ -330,30 +269,12 @@ $AppVersion = $rc.Value
 $resolvedSources['SSCAppVersion'] = $rc.Source
 $resolvedValues['SSCAppVersion'] = $rc.Value
 
-$rc = Resolve-ConfigValue -Name 'AviatorUrl' -ParamValue $AviatorUrl -EnvNames @('AVIATOR_URL') -ConfigValue $configAviatorUrl
-$AviatorUrl = $rc.Value
-$resolvedSources['AviatorUrl'] = $rc.Source
-$resolvedValues['AviatorUrl'] = $rc.Value
-
-$rc = Resolve-ConfigValue -Name 'AviatorToken' -ParamValue $AviatorToken -EnvNames @('AVIATOR_TOKEN') -ConfigValue $configAviatorToken
-$AviatorToken = $rc.Value
-$resolvedSources['AviatorToken'] = $rc.Source
-$resolvedValues['AviatorToken'] = $rc.Value
-
-$rc = Resolve-ConfigValue -Name 'AviatorAppName' -ParamValue $AviatorAppName -EnvNames @('AVIATOR_APP_NAME') -ConfigValue $configAviatorAppName
-$AviatorAppName = $rc.Value
-$resolvedSources['AviatorAppName'] = $rc.Source
-$resolvedValues['AviatorAppName'] = $rc.Value
-
 # Centralized list of environment variable candidates checked for each logical key (used by the WhatIf preview)
 $envCandidates = @{
     'SSCUrl'            = @('SSC_URL')
     'SSCAuthToken'      = @('SSC_AUTH_TOKEN')
     'SSCAppName'        = @('SSC_APP_NAME')
     'SSCAppVersion'     = @('SSC_APP_VERSION_NAME')
-    'AviatorUrl'        = @('AVIATOR_URL')
-    'AviatorToken'      = @('AVIATOR_TOKEN')
-    'AviatorAppName'    = @('AVIATOR_APP_NAME')
 }
 
 # Helper to print environment variable checks (present/absent) for a given key
@@ -386,24 +307,19 @@ if ($WhatIfConfig) {
 
     Write-Host "=== scan.ps1 Effective Configuration (WhatIf) ===" -ForegroundColor Yellow
     $report = @()
-    # Core SSC/Aviator values
+    # Core SSC values
     $report += [PSCustomObject]@{ Key = 'SSCUrl'; Value = MaskVal 'SSCUrl' $resolvedValues['SSCUrl']; Source = $resolvedSources['SSCUrl'] }
     $report += [PSCustomObject]@{ Key = 'SSCAuthToken'; Value = MaskVal 'SSCAuthToken' $resolvedValues['SSCAuthToken']; Source = $resolvedSources['SSCAuthToken'] }
     $report += [PSCustomObject]@{ Key = 'SSCAppName'; Value = MaskVal 'SSCAppName' $resolvedValues['SSCAppName']; Source = $resolvedSources['SSCAppName'] }
     $report += [PSCustomObject]@{ Key = 'SSCAppVersion'; Value = MaskVal 'SSCAppVersion' $resolvedValues['SSCAppVersion']; Source = $resolvedSources['SSCAppVersion'] }
-    $report += [PSCustomObject]@{ Key = 'AviatorUrl'; Value = MaskVal 'AviatorUrl' $resolvedValues['AviatorUrl']; Source = $resolvedSources['AviatorUrl'] }
-    $report += [PSCustomObject]@{ Key = 'AviatorToken'; Value = MaskVal 'AviatorToken' $resolvedValues['AviatorToken']; Source = $resolvedSources['AviatorToken'] }
-    $report += [PSCustomObject]@{ Key = 'AviatorAppName'; Value = MaskVal 'AviatorAppName' $resolvedValues['AviatorAppName']; Source = $resolvedSources['AviatorAppName'] }
 
     # Additional useful keys for preview
     $report += [PSCustomObject]@{ Key = 'BuildId'; Value = MaskVal 'BuildId' $BuildId; Source = if ([string]::IsNullOrEmpty($BuildId)) { '<unset>' } else { 'parameter' } }
     $report += [PSCustomObject]@{ Key = 'ProjectRoot'; Value = MaskVal 'ProjectRoot' $ProjectRoot; Source = 'parameter' }
-    $report += [PSCustomObject]@{ Key = 'VerboseOutput'; Value = if ($VerboseOutput) { 'True' } else { 'False' }; Source = 'parameter' }
-    $report += [PSCustomObject]@{ Key = 'DebugOutput'; Value = if ($DebugOutput) { 'True' } else { 'False' }; Source = 'parameter' }
+    $report += [PSCustomObject]@{ Key = 'Verbose'; Value = if ($PSBoundParameters.ContainsKey('Verbose') -or $VerbosePreference -eq 'Continue') { 'True' } else { 'False' }; Source = 'common parameter' }
+    $report += [PSCustomObject]@{ Key = 'Debug'; Value = if ($PSBoundParameters.ContainsKey('Debug') -or $DebugPreference -eq 'Continue') { 'True' } else { 'False' }; Source = 'common parameter' }
     $report += [PSCustomObject]@{ Key = 'UploadToSSC'; Value = if ($UploadToSSC) { 'True' } else { 'False' }; Source = 'parameter' }
-    $report += [PSCustomObject]@{ Key = 'AuditWithAviator'; Value = if ($AuditWithAviator) { 'True' } else { 'False' }; Source = 'parameter' }
     $report += [PSCustomObject]@{ Key = 'SSCUploadOnly'; Value = if ($SSCUploadOnly) { 'True' } else { 'False' }; Source = 'parameter' }
-    $report += [PSCustomObject]@{ Key = 'AviatorAuditOnly'; Value = if ($AviatorAuditOnly) { 'True' } else { 'False' }; Source = 'parameter' }
     $report += [PSCustomObject]@{ Key = 'FPRFile'; Value = ("$BuildId.fpr") ; Source = 'derived' }
     $report += [PSCustomObject]@{ Key = 'TranslationOptions'; Value = if ($transOptions) { $transOptions } else { '<none>' }; Source = if ($transOptions) { 'config' } else { '<none>' } }
     $report += [PSCustomObject]@{ Key = 'ScanOptions'; Value = if ($scanOptions) { $scanOptions } else { '<none>' }; Source = if ($scanOptions) { 'config' } else { '<none>' } }
@@ -416,7 +332,7 @@ if ($WhatIfConfig) {
         Write-Host "`nEnvironment variables checked (per key):" -ForegroundColor Yellow
         foreach ($k in $envCandidates.Keys) {
             $cands = $envCandidates[$k]
-            Write-Host ("- {0}:" -f $k) -ForegroundColor Cyan
+            Write-Host (("- {0}:" -f $k)) -ForegroundColor Cyan
             Print-EnvChecks -Key $k -Candidates $cands
         }
     }
@@ -471,69 +387,15 @@ if (-not [string]::IsNullOrEmpty($SSCAppVersionName)) {
     Write-Host "Using SSC App Version from config file" -ForegroundColor Yellow
 }
 
-# Resolve Aviator configuration with precedence: Parameters > Environment Variables > Config File
-# Aviator URL
-if (-not [string]::IsNullOrEmpty($AviatorUrl)) {
-    Write-Host "Using Aviator URL from parameter" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($env:AVIATOR_URL)) {
-    $AviatorUrl = $env:AVIATOR_URL
-    Write-Host "Using Aviator URL from environment variable" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($configAviatorUrl)) {
-    $AviatorUrl = $configAviatorUrl
-    Write-Host "Using Aviator URL from config file" -ForegroundColor Yellow
-}
-
-# Aviator Token
-if (-not [string]::IsNullOrEmpty($AviatorToken)) {
-    Write-Host "Using Aviator Token from parameter" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($env:AVIATOR_TOKEN)) {
-    $AviatorToken = $env:AVIATOR_TOKEN
-    Write-Host "Using Aviator Token from environment variable" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($configAviatorToken)) {
-    $AviatorToken = $configAviatorToken
-    Write-Host "Using Aviator Token from config file" -ForegroundColor Yellow
-}
-
-# Aviator App Name
-if (-not [string]::IsNullOrEmpty($AviatorAppName)) {
-    Write-Host "Using Aviator App Name from parameter" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($env:AVIATOR_APP_NAME)) {
-    $AviatorAppName = $env:AVIATOR_APP_NAME
-    Write-Host "Using Aviator App Name from environment variable" -ForegroundColor Yellow
-} elseif (-not [string]::IsNullOrEmpty($configAviatorAppName)) {
-    $AviatorAppName = $configAviatorAppName
-    Write-Host "Using Aviator App Name from config file" -ForegroundColor Yellow
-}
-
-# Display resolved SSC configuration if uploading
+# If UploadToSSC is requested, also display the values (masking sensitive values unless Debug is present)
 if ($UploadToSSC) {
-    if (-not [string]::IsNullOrEmpty($SSCUrl)) {
-        Write-Host "SSC Upload URL: $SSCUrl" -ForegroundColor Cyan
-    }
-    if (-not [string]::IsNullOrEmpty($AppName)) {
-        Write-Host "SSC Application: $AppName" -ForegroundColor Cyan
-    }
-    if (-not [string]::IsNullOrEmpty($AppVersion)) {
-        Write-Host "SSC Application Version: $AppVersion" -ForegroundColor Cyan
-    }
-}
-
-# Display resolved Aviator configuration if auditing
-if ($AuditWithAviator) {
-    if (-not [string]::IsNullOrEmpty($AviatorUrl)) {
-        Write-Host "Aviator URL: $AviatorUrl" -ForegroundColor Cyan
-    }
-    if (-not [string]::IsNullOrEmpty($AviatorAppName)) {
-        Write-Host "Aviator Application: $AviatorAppName" -ForegroundColor Cyan
-    }
+    if ($resolvedValues['SSCUrl']) { Write-Host "SSC Upload URL: $($resolvedValues['SSCUrl'])" -ForegroundColor Cyan }
+    if ($resolvedValues['SSCAppName']) { Write-Host "SSC Application: $($resolvedValues['SSCAppName'])" -ForegroundColor Cyan }
+    if ($resolvedValues['SSCAppVersion']) { Write-Host "SSC Application Version: $($resolvedValues['SSCAppVersion'])" -ForegroundColor Cyan }
 }
 
 # Check if we should skip scan steps and only run specific operations
-if ($AviatorAuditOnly) {
-    Write-Host "`n=== Aviator Audit Only Mode ===" -ForegroundColor Yellow
-    Write-Host "Skipping scan steps, proceeding directly to Aviator audit..." -ForegroundColor Cyan
-    $fprFile = "$BuildId.fpr"  # Set expected FPR file name for reference
-} elseif ($SSCUploadOnly) {
+if ($SSCUploadOnly) {
     Write-Host "`n=== SSC Upload Only Mode ===" -ForegroundColor Yellow
     Write-Host "Skipping scan steps, proceeding directly to SSC upload..." -ForegroundColor Cyan
     $fprFile = "$BuildId.fpr"  # Set expected FPR file name for reference
@@ -542,6 +404,17 @@ if ($AviatorAuditOnly) {
     Write-Host "Build ID: $BuildId" -ForegroundColor Cyan
     Write-Host "Project Root: $ProjectRoot" -ForegroundColor Cyan
     Write-Host ""
+
+    # Before running any SourceAnalyzer/scan commands ensure the binary is available
+    Write-Host "Checking for sourceanalyzer..." -ForegroundColor Yellow
+    try {
+        $null = Get-Command sourceanalyzer -ErrorAction Stop
+        Write-Host "sourceanalyzer found." -ForegroundColor Green
+    }
+    catch {
+        Write-Error "sourceanalyzer command not found. Please ensure OpenText SAST is installed and in your PATH."
+        exit 1
+    }
 
     # Step 1: Clean the build
     Write-Host "[1/4] Cleaning build..." -ForegroundColor Yellow
@@ -590,7 +463,7 @@ if ($AviatorAuditOnly) {
     try {
         $null = Get-Command FPRUtility -ErrorAction Stop
         Write-Host "Executing: FPRUtility -information -analyzerIssueCounts -project `"$fprFile`"" -ForegroundColor Cyan
-        
+
         $process = Start-Process -FilePath "FPRUtility" `
                                   -ArgumentList "-information -analyzerIssueCounts -project `"$fprFile`"" `
                                   -NoNewWindow `
@@ -609,7 +482,7 @@ if ($AviatorAuditOnly) {
 }
 
 # Step 5: Upload to SSC (optional, or upload-only mode)
-if (($UploadToSSC -and -not $AviatorAuditOnly) -or $SSCUploadOnly) {
+if ($UploadToSSC -or $SSCUploadOnly) {
     Write-Host "[5/5] Uploading FPR to Fortify Software Security Center..." -ForegroundColor Yellow
     
     # Validate SSC configuration
@@ -639,14 +512,14 @@ if (($UploadToSSC -and -not $AviatorAuditOnly) -or $SSCUploadOnly) {
     $uploadAppName = if ([string]::IsNullOrEmpty($AppName)) { $BuildId } else { $AppName }
     
     Write-Host "Executing: fortifyclient uploadFPR -file `"$fprFile`" -url $SSCUrl -authtoken [REDACTED] -application `"$uploadAppName`" -applicationVersion `"$AppVersion`"" -ForegroundColor Cyan
-    
+
     try {
         $process = Start-Process -FilePath "fortifyclient" `
                                   -ArgumentList "uploadFPR -file `"$fprFile`" -url $SSCUrl -authtoken $SSCAuthToken -application `"$uploadAppName`" -applicationVersion `"$AppVersion`"" `
                                   -NoNewWindow `
                                   -Wait `
                                   -PassThru
-        
+
         if ($process.ExitCode -eq 0) {
             Write-Host "FPR upload completed successfully.`n" -ForegroundColor Green
         } else {
@@ -659,102 +532,12 @@ if (($UploadToSSC -and -not $AviatorAuditOnly) -or $SSCUploadOnly) {
     }
 }
 
-# Step 6: Audit with Aviator (optional or audit-only mode, skip if SSCUploadOnly)
-if (($AuditWithAviator -or $AviatorAuditOnly) -and -not $SSCUploadOnly) {
-    Write-Host "[6/6] Auditing results with Fortify Aviator..." -ForegroundColor Yellow
-    
-    # Validate Aviator configuration
-    if ([string]::IsNullOrEmpty($SSCUrl) -or [string]::IsNullOrEmpty($SSCAuthToken) -or 
-        [string]::IsNullOrEmpty($AviatorUrl) -or [string]::IsNullOrEmpty($AviatorToken) -or 
-        [string]::IsNullOrEmpty($AviatorAppName) -or [string]::IsNullOrEmpty($AppName) -or [string]::IsNullOrEmpty($AppVersion)) {
-        Write-Error "Aviator audit configuration incomplete. Please ensure SSCUrl, SSCAuthToken, AviatorUrl, AviatorToken, AviatorAppName, AppName, and AppVersion are all configured via parameters, environment variables, or fortify.config file"
-        exit 1
-    }
-    
-    # Check if fcli is available
-    try {
-        $null = Get-Command fcli -ErrorAction Stop
-        Write-Host "fcli found." -ForegroundColor Green
-    }
-    catch {
-        Write-Error "fcli command not found. Please ensure Fortify CLI is installed and in your PATH."
-        exit 1
-    }
-    
-    try {
-        # Login to SSC
-        Write-Host "Logging into SSC..." -ForegroundColor Cyan
-        $process = Start-Process -FilePath "fcli" `
-                                  -ArgumentList "ssc session login --url $SSCUrl -t $SSCAuthToken" `
-                                  -NoNewWindow `
-                                  -Wait `
-                                  -PassThru
-        
-        if ($process.ExitCode -ne 0) {
-            Write-Error "Failed to login to SSC with exit code: $($process.ExitCode)"
-            exit $process.ExitCode
-        }
-        
-        # Login to Aviator
-        Write-Host "Logging into Aviator..." -ForegroundColor Cyan
-        $process = Start-Process -FilePath "fcli" `
-                                  -ArgumentList "aviator session login --url $AviatorUrl -t string:$AviatorToken" `
-                                  -NoNewWindow `
-                                  -Wait `
-                                  -PassThru
-        
-        if ($process.ExitCode -ne 0) {
-            Write-Error "Failed to login to Aviator with exit code: $($process.ExitCode)"
-            exit $process.ExitCode
-        }
-        
-        # Run Aviator audit
-        Write-Host "Running Aviator audit..." -ForegroundColor Cyan
-        $appVersionArg = "$AppName`:$AppVersion"
-        Write-Host "Executing: fcli aviator ssc audit --app `"$AviatorAppName`" --appversion `"$appVersionArg`"" -ForegroundColor Cyan
-        
-        # Use Invoke-Expression with proper quoting to handle spaces and special characters
-        $fcliCommand = "fcli aviator ssc audit --app `"$AviatorAppName`" --appversion `"$appVersionArg`""
-        Write-Host "Full command: $fcliCommand" -ForegroundColor Gray
-        
-        try {
-            $result = Invoke-Expression $fcliCommand
-            $exitCode = $LASTEXITCODE
-            
-            if ($exitCode -eq 0) {
-                Write-Host "Aviator audit completed successfully.`n" -ForegroundColor Green
-            } else {
-                Write-Warning "Aviator audit completed with exit code: $exitCode"
-            }
-        }
-        catch {
-            Write-Error "Failed to execute Aviator audit command: $_"
-            exit 1
-        }
-        
-        if ($process.ExitCode -eq 0) {
-            Write-Host "Aviator audit completed successfully.`n" -ForegroundColor Green
-        } else {
-            Write-Warning "Aviator audit completed with exit code: $($process.ExitCode)"
-        }
-    }
-    catch {
-        Write-Error "Failed to execute Aviator audit: $_"
-        exit 1
-    }
-}
-
-if ($AviatorAuditOnly) {
-    Write-Host "=== Aviator Audit Complete ===" -ForegroundColor Green
-} elseif ($SSCUploadOnly) {
+if ($SSCUploadOnly) {
     Write-Host "=== SSC Upload Complete ===" -ForegroundColor Green
 } else {
     Write-Host "=== OpenText SAST Scan Complete ===" -ForegroundColor Green
     Write-Host "Results available in: $fprFile" -ForegroundColor Cyan
 }
-if ((($UploadToSSC -and -not $AviatorAuditOnly) -or $SSCUploadOnly) -and $SSCUrl) {
+if (($UploadToSSC -or $SSCUploadOnly) -and $SSCUrl) {
     Write-Host "Results uploaded to SSC: $SSCUrl" -ForegroundColor Cyan
-}
-if (($AuditWithAviator -or $AviatorAuditOnly) -and -not $SSCUploadOnly -and $AviatorUrl) {
-    Write-Host "Results audited with Aviator: $AviatorUrl" -ForegroundColor Cyan
 }

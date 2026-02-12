@@ -1,0 +1,62 @@
+# Create IQ Server User Token Credentials and set as secrets in the repository settings with the names 
+# IQ_SERVER_USERNAME and IQ_SERVER_PASSWORD respectively. 
+# Also set the IQ Server URL as a repository variable with the name IQ_SERVER_URL 
+# and the Application ID as a secret with the name IQ_SERVER_APPLICATION_ID.
+
+name: Sonatype IQ Scan
+
+on:
+  # Triggers the workflow on push or pull request events for the main and develop branches
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      runIQScan:
+        description: 'Carry out SCA scan using Sonatype IQ Server'
+        required: true
+        default: 'true'
+      syncToSSC:
+        description: 'Synchronize Sonatype results to SSC'
+        required: false
+        default: 'true'
+        
+# Global environment variables
+env:
+  DEFAULT_ORG_NAME: "fortify-presales"
+  DEFAULT_APP_NAME: "IWA-Java"
+  GRADLE_VERSION: "7.6.4"
+  
+jobs:
+  
+  Sonatype-IQ-Scan:
+    runs-on: ubuntu-latest
+    if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runIQScan == 'true') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Fetch at least the immediate parents so that if this is a pull request then we can checkout the head.
+          fetch-depth: 2
+      # Run Sonatype IQ Server scan
+      - name: Run Sonatype Evaluate Action
+        id: evaluate
+        uses: sonatype/actions/evaluate@v1
+        with:
+          iq-server-url: ${{ vars.IQ_SERVER_URL }}
+          username: ${{ secrets.IQ_SERVER_USERNAME }}
+          password: ${{ secrets.IQ_SERVER_PASSWORD }}
+          application-id: ${{ secrets.IQ_SERVER_APPLICATION_ID }}
+          scan-targets: build.gradle
+      # Just print the results for demonstration purposes, in a real workflow you would likely want to fail the build if the policy evaluation fails or upload the results to another system such as SSC.
+      - name: Print Results
+        run: |
+          echo "Scan ID: ${{ steps.evaluate.outputs.scan-id }}"
+          echo "Report URL: ${{ steps.evaluate.outputs.report-url }}"
