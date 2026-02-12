@@ -65,7 +65,7 @@ pipeline {
         GITHUB_SHA = sh (script: "git rev-parse HEAD", returnStdout: true).trim()
         GITHUB_REPOSITORY = "${env.GIT_REPO_NAME}${env.FORTIFY_APP_NAME_POSTFIX}"
         GITHUB_REF_NAME = sh (script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
-        GITHUB_BRANCH = "${params.FOD_APPVER_NAME ?: ${env.GIT_REF_NAME}"
+        GITHUB_BRANCH = "${params.FOD_APPVER_NAME ?: env.GIT_REF_NAME}"
     }  
 
     //tools {
