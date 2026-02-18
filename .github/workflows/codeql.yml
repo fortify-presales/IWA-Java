@@ -30,7 +30,6 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: java
-          config-file: .github/codeql/empty-config.yml
 
       - name: Set up Java (JDK) # optional: CodeQL can auto-detect, but ensure JDK is available
         uses: actions/setup-java@v4
