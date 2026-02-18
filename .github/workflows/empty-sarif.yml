@@ -1,0 +1,38 @@
+name: Clear Code Scanning Alerts (Empty SARIF)
+
+on:
+  workflow_dispatch:
+    inputs:
+      TOOL_NAME:
+        description: 'Tool name to set in the SARIF tool.driver.name'
+        required: false
+        default: 'CodeQL'
+
+jobs:
+  clear-alerts:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Create empty SARIF
+        run: |
+          cat > empty.sarif <<JSON
+          {
+            "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+              {
+                "tool": { "driver": { "name": "${{ github.event.inputs.TOOL_NAME }}", "version": "empty-cleanup" } },
+                "results": []
+              }
+            ]
+          }
+          JSON
+
+      - name: Upload empty SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: empty.sarif

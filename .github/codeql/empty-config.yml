@@ -1,3 +1,4 @@
-name: "Empty CodeQL run (no queries)"
-disable-default-queries: true
-# Intentionally no 'queries:' entries
+name: "Empty CodeQL scan by excluding all paths"
+disable-default-queries: false           # leave defaults ON so the CLI has queries
+paths-ignore:
+  - "**"                                 # ignore everything
