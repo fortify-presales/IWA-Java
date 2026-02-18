@@ -30,6 +30,7 @@ jobs:
         uses: github/codeql-action/init@v2
         with:
           languages: java
+          queries: ./etc/empty.qls # Use an empty query suite to remove old results and focus on new issues
 
       - name: Set up Java (JDK) # optional: CodeQL can auto-detect, but ensure JDK is available
         uses: actions/setup-java@v4

@@ -1,4 +1,3 @@
-
 # Create GitHub Action Secrets for your version of the application:
 #   DEBRICKEN_TOKEN should be an API Access Token from your Debricked tenant.
 
@@ -77,8 +76,8 @@ jobs:
 
   Debricked-FoD-Import:
     runs-on: ubuntu-latest
-    needs: [ Debricked-SCA ]
-    if: ${{ needs.Debricked-SCA.result == 'success' && ((github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.uploadToFoD == 'true')) }}
+    needs: [ Debricked-SCA-Scan ]
+    if: ${{ needs.Debricked-SCA-Scan.result == 'success' && ((github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.uploadToFoD == 'true')) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -125,4 +124,3 @@ jobs:
           FOD_CLIENT_SECRET: ${{ secrets.FOD_CLIENT_SECRET }}
           FOD_APP_NAME: ${{ steps.fortify-app-and-rel-name.outputs.app_name }}
           FOD_RELEASE_NAME: ${{ steps.fortify-app-and-rel-name.outputs.release_name }}
-        
