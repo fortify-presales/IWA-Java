@@ -27,10 +27,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@v3
         with:
           languages: java
-          queries: ./etc/empty.qls # Use an empty query suite to remove old results and focus on new issues
+          config-file: .github/codeql/empty-config.yml
 
       - name: Set up Java (JDK) # optional: CodeQL can auto-detect, but ensure JDK is available
         uses: actions/setup-java@v4
@@ -44,5 +44,4 @@ jobs:
           ./gradlew build --no-daemon
 
       - name: Run CodeQL analysis
-        uses: github/codeql-action/analyze@v2
-
+        uses: github/codeql-action/analyze@v3
