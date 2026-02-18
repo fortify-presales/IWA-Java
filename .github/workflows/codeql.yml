@@ -1,0 +1,47 @@
+# This workflow uses the CodeQL Action to analyze code for security vulnerabilities and errors.
+# Set the DO_CODEQL_SCAN repository variable to "true" to enable the scan on push and pull request events.
+# You can also trigger the scan manually via the "Run workflow" button in the Actions tab, and override the variable for that run.
+name: "CodeQL Security Scan"
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      DO_CODEQL_SCAN:
+        description: 'Set to "true" to run the CodeQL scan (overrides repo variable)'
+        required: false
+        default: ''
+
+permissions:
+  security-events: write
+
+jobs:
+  codeql-analysis:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.DO_CODEQL_SCAN == 'true') || (github.event_name != 'workflow_dispatch' && vars.DO_CODEQL_SCAN == 'true') }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: java
+
+      - name: Set up Java (JDK) # optional: CodeQL can auto-detect, but ensure JDK is available
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build with Gradle
+        run: |
+          chmod +x ./gradlew
+          ./gradlew build --no-daemon
+
+      - name: Run CodeQL analysis
+        uses: github/codeql-action/analyze@v2
+

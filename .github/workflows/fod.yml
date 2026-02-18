@@ -70,13 +70,13 @@ env:
 jobs:
 
   #
-  # The Env-Prepare job is responsible for setting up the environment variables that will be used in the subsequent jobs.
+  # The Prepare job is responsible for setting up the environment variables that will be used in the subsequent jobs.
   # It checks whether the workflow is running in the context of a pull request or a branch push and sets the FOD_RELEASE
   # and FOD_PARENT_RELEASE variables accordingly. For pull requests, it constructs the release name to indicate that
   # it's a merge to the base branch, while for branch pushes, it uses the branch name directly. This setup allows the
   # SAST and DAST scan jobs to reference the correct release information when they run.
   #
-  Env-Prepare:
+  Prepare:
     runs-on: ubuntu-latest
     outputs:
       FOD_RELEASE: ${{ steps.commands.outputs.FOD_RELEASE }}
@@ -108,10 +108,10 @@ jobs:
   FoD-SAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runFoDSASTScan == 'true') }}
-    needs: [ Env-Prepare ]
+    needs: [ Prepare ]
     env: 
-      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
-      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
+      FOD_RELEASE: ${{ needs.Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -123,19 +123,16 @@ jobs:
       #
       # See: https://github.com/marketplace/actions/fortify-ast-scan
       #
-      - name: Run Fortify on Demand SAST Scan
+      - name: Run FoD SAST and SCA Scan
+        timeout-minutes: 360
         uses: fortify/github-action@v2
         with:
           sast-scan: true
           debricked-sca-scan: true
         env:
           FOD_URL: ${{ vars.FOD_URL }}
-          #FOD_TENANT: ${{secrets.FOD_TENANT}}
-          #FOD_USER: ${{secrets.FOD_USER}}
-          #FOD_PASSWORD: ${{secrets.FOD_PAT}}
           FOD_CLIENT_ID: ${{secrets.FOD_CLIENT_ID}}
           FOD_CLIENT_SECRET: ${{secrets.FOD_CLIENT_SECRET}}
-          # FOD_LOGIN_EXTRA_OPTS: --socket-timeout=60s
           #FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
           DO_SETUP: true
           SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}" --sdlc-status Development --app-owner {1} --assessment-type "{2}"', env.FOD_PARENT_RELEASE, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
@@ -152,26 +149,26 @@ jobs:
   # has explicitly chosen to run it via the workflow_dispatch inputs. This is because DAST scans can be time-consuming
   # and may not be necessary for every pull request or branch. By limiting it to the default branch, we ensure that we
   # are only running DAST scans on code that is being merged into the main line of development. The job will use the
-  # Fortify CLI to start a DAST scan for the release that was prepared in the Env-Prepare job, and it will wait for the
+  # Fortify CLI to start a DAST scan for the release that was prepared in the Prepare job, and it will wait for the
   # scan to complete before proceeding.
   #
   FoD-DAST-Scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
     if: ${{ (github.ref_name == github.event.repository.default_branch) && (github.event.inputs.runFoDDASTScan == 'true') }}
-    needs: [ Env-Prepare, FoD-SAST-Scan ]
+    needs: [ Prepare, FoD-SAST-Scan ]
     env: 
-      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
-      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
+      FOD_RELEASE: ${{ needs.Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Fortify tools
         uses: fortify/github-action/setup@v2
         with:
-          #tool-definitions: https://github.com/fortify/tool-definitions/releases/download/v1/tool-definitions.yaml.zip
           export-path: true
           fcli: latest
-      - name: Check FoD Release
+      - name: Run FoD DAST Scan
         shell: bash
         run: |
           fcli fod session login --url $FOD_API_URI --client-id $FOD_CLIENT_ID --client-secret $FOD_CLIENT_SECRET --fod-session github-actions
@@ -195,10 +192,10 @@ jobs:
   Verify-Security-Policy:
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [ Env-Prepare, FoD-SAST-Scan ]
+    needs: [ Prepare, FoD-SAST-Scan ]
     env:
-      FOD_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_RELEASE }}
-      FOD_PARENT_RELEASE: ${{ needs.Env-Prepare.outputs.FOD_PARENT_RELEASE }}
+      FOD_RELEASE: ${{ needs.Prepare.outputs.FOD_RELEASE }}
+      FOD_PARENT_RELEASE: ${{ needs.Prepare.outputs.FOD_PARENT_RELEASE }}
     continue-on-error: true
     steps:
       - name: Checkout
@@ -207,6 +204,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # This script polls the GitHub Actions API to check for the status of the FoD-DAST-Scan job in the current workflow run.
+          # It waits until the job is no longer in progress before allowing the workflow to continue to the policy check step. 
+          # This ensures that the policy check evaluates the results of the DAST scan if it was triggered.
           set -euo pipefail
           API="https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs"
           echo "Looking for job named 'FoD-DAST-Scan' in this workflow run..."
@@ -239,6 +239,7 @@ jobs:
             echo "Timed out waiting for FoD-DAST-Scan; continuing anyway."
           fi
       - name: Run Check Policy Action
+        continue-on-error: true # only for reporting, do not fail the job if policy check fails
         uses: fortify/github-action@v2
         with:
           sast-scan: false

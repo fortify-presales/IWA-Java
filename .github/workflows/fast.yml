@@ -7,7 +7,7 @@
 #   FORTIFY_SSC_TOKEN should be an SSC Authorization token (CIToken) obtained from your Fortify tenant.
 #   FORTIFY_SCSAST_CLIENT_AUTH_TOKEN should be the ScanCentral SAST Client Authentication token for your Fortify tenant.
 
-name: FAST with Fortify ScanCentral DAST
+name: OpenText ScanCentral FAST Scan
 
 on:
   # Allows you to run this workflow manually from the Actions tab

@@ -3,11 +3,13 @@
 # Also set the IQ Server URL as a repository variable with the name IQ_SERVER_URL 
 # and the Application ID as a secret with the name IQ_SERVER_APPLICATION_ID.
 
-name: Sonatype IQ Scan
+name: Sonatype IQ SCA Scan
 
 on:
   # Triggers the workflow on push or pull request events for the main and develop branches
   push:
+    paths:
+      - 'build.gradle'
     branches:
       - main
       - develop
@@ -19,14 +21,14 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
     inputs:
-      runIQScan:
+      DO_IQ_SCAN:
         description: 'Carry out SCA scan using Sonatype IQ Server'
         required: true
-        default: 'true'
-      syncToSSC:
+        default: ''
+      SYNC_IQ_SSC:
         description: 'Synchronize Sonatype results to SSC'
         required: false
-        default: 'true'
+        default: ''
         
 # Global environment variables
 env:
@@ -38,7 +40,7 @@ jobs:
   
   Sonatype-IQ-Scan:
     runs-on: ubuntu-latest
-    if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runIQScan == 'true') }}
+    if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.DO_IQ_SCAN == 'true') }}
     permissions:
       security-events: write # for GitHub Advanced Security integration, if desired
     steps:
