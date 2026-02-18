@@ -139,6 +139,7 @@ jobs:
           PACKAGE_EXTRA_OPTS: -bt gradle -bf build.gradle -bc "clean build -x test" -oss
           # FOD_SAST_SCAN_EXTRA_OPTS:
           DO_WAIT: true
+          SAST_WAIT_EXTRA_OPTS: --timeout 2h
           DO_POLICY_CHECK: false  # we will do policy check in a separate job after DAST scan
           DO_JOB_SUMMARY: true
           DO_PR_COMMENT: true
