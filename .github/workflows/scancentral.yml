@@ -1,30 +1,47 @@
-
 # Create GitHub Action Repository Variables for your version of the application:
-#   FORTIFY_BASE_URL should be the Fortify Base URL (e.g. https://ssc.uat.fortifyhosted.net)
-#   FORTIFY_PARENT_APPVER_NAME is the Fortify SSC Application Version Name corresponding to the parent branch of any newly created branch, this is typically "main" or "develop"
-#   FORTIFY_SCANCENTRAL_VERSION is the version of ScanCentral SAST Sensors being used
+# - SSC_URL: URL of your Fortify Software Security Center instance (e.g. https://ssc.example.com)
+# - SCANCENTRAL_VERSION: version of Fortify ScanCentral SAST sensor to use (e.g. 22.1.0)
+# - SSC_APP_NAME_POSTFIX: optional postfix to append to the application name in SSC (e.g. -dev) to allow using different application names for different branches/environments
+# - SSC_APPVERSION: name of the application version in SSC to use for the SAST scan (can be set dynamically in the workflow based on branch or pull request information, see Prepare job below)
+# - SSC_PARENT_APPVERSION: name of the parent application version in SSC to use for the SAST scan (can be set dynamically in the workflow based on branch or pull request information, see Prepare job below)
+# - SC_SAST_SENSOR_VERSION: version of the ScanCentral SAST sensor to use for SAST scan (e.g. 22.1.0)
+# - SCDAST_SETTINGS_ID: ID of the ScanCentral DAST settings to use for DAST scan (can be found in the URL when you open the settings in SSC, e.g. if URL is https://ssc.example.com/
 # Create GitHub Action Secrets for your version of the application:
-#   FORTIFY_SSC_TOKEN should be an SSC Authorization token (CIToken) obtained from your Fortify tenant.
-#   FORTIFY_CLIENT_AUTH_TOKEN should be the ScanCentral SAST Client Authentication token for your Fortify tenant.
+# - SSC_TOKEN: API token for authenticating to your SSC instance (can be generated in your user profile in SSC)
+# - SC_SAST_TOKEN: API token for authenticating to the ScanCentral SAST sensor (can be generated in your user profile in SSC)
+# - DEBRICKED_TOKEN: API token for authenticating to Debricked (can be generated in your user profile in Debricked
+
 
 name: OpenText ScanCentral SAST and DAST Scan
 
+# Set default permissions for the GITHUB_TOKEN
+permissions:
+  contents: read
+  pull-requests: write
+
 on:
-  # Triggers the workflow on push or pull request events but only for the main or dev branches
-  # Commented out as we only want FoD workflow to trigger automatically
+  # Triggers the workflow on push or pull request events but only for the main or develop branches
   #push:
   #  paths-ignore:
   #    - '.github/**/**'
+  #    - 'Jenkinsfile'
+  #    - '.gitlab-ci.yml'
+  #    - 'azure-pipelines.yml'
   #    - 'bin/**'
   #    - 'data/**'
   #    - 'etc/**'
   #    - 'tests/**'
-  #    - 'README.md'
+  #    - '*.md'
   #    - 'LICENSE'
   #  branches:
-  #    - '**'        # matches every branch
+  #    - main
+  #    - develop
+  #    - feature/**    # runs on any branch named feature/...
+  #    - bugfix/**     # runs on any branch named bugfix/...
   #pull_request:
-  #  branches: [ main, develop ]
+  #  branches:
+  #    - main
+  #    - develop
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -37,201 +54,172 @@ on:
         description: 'Carry out DAST scan using Fortify ScanCentral'
         required: false
         default: 'false'
-      deployApp:
-        description: 'Deploy App'
-        required: false
-        default: 'true'            
 
 # Global environment variables
 env:
   DEFAULT_APP_NAME: "IWA-Java"
+  DEFAULT_PARENT_RELEASE_NAME: "main"
   GRADLE_VERSION: "7.6.4"
+  JAVA_VERSION: "17"
+  BASE_DIR: "."
 
 jobs:
 
-  Build-And-Unit-Test:
+  #
+  # The Prepare job is responsible for setting up the environment variables that will be used in the subsequent jobs.
+  # It checks whether the workflow is running in the context of a pull request or a branch push and sets the SSC_APPVERSION
+  # and SSC_PARENT_APPVERSION variables accordingly. For pull requests, it constructs the release name to indicate that
+  # it's a merge to the base branch, while for branch pushes, it uses the branch name directly. This setup allows the
+  # SAST and DAST scan jobs to reference the correct release information when they run.
+  #
+  Prepare:
     runs-on: ubuntu-latest
+    outputs:
+      SSC_APPVERSION: ${{ steps.commands.outputs.SSC_APPVERSION }}
+      SSC_PARENT_APPVERSION: ${{ steps.commands.outputs.SSC_PARENT_APPVERSION }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          # Fetch at least the immediate parents so that if this is a pull request then we can checkout the head.
-          fetch-depth: 2
-      # Setup JDK 11 on host
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: ${{ env.GRADLE_VERSION }}
-      # Build / Test with Gradle
-      - name: Build with Gradle
-        run: ./gradlew clean build test
-      # Publish test results
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          files: |
-            build/test-results/**/*.xml
-            build/test-results/**/*.trx
-            build/test-results/**/*.json     
-
-  Quality-Gate:
-    runs-on: ubuntu-latest
-    if: ${{ always() }}
-    needs: [ Build-And-Unit-Test ]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Fetch at least the immediate parents so that if this is a pull request then we can checkout the head.
-          fetch-depth: 2
-
-    # TBD
+      - name: Set up environment variables
+        id: commands
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "Running in a pull request pipeline ..."
+            echo "SSC_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APP_NAME_POSTFIX }}:merge-to-${{ github.base_ref }}#PR${{ github.event.number }}" >> $GITHUB_OUTPUT
+            echo "SSC_PARENT_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APP_NAME_POSTFIX }}:${{ github.head_ref }}" >> $GITHUB_OUTPUT
+          else
+            echo "Running in a branch pipeline ..."
+            echo "SSC_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APP_NAME_POSTFIX }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "SSC_PARENT_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APP_NAME_POSTFIX }}:${{ env.DEFAULT_PARENT_RELEASE_NAME }}" >> $GITHUB_OUTPUT
+          fi 
 
   ScanCentral-SAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runScanCentralSASTScan == 'true') }}
-    needs: [ Quality-Gate ]
+    needs: [ Prepare ]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      # Setup JDK 17 on host
+      - uses: actions/setup-java@v4
         with:
-          # Fetch at least the immediate parents so that if this is a pull request then we can checkout the head.
-          fetch-depth: 2
-      - name: Fortify App and Release Name
-        id: fortify-app-and-rel-name
-        uses: fortify-presales/github-actions/fortify-app-and-release-name@main
-        with:
-          default_fortify_app_name: ${{ env.DEFAULT_APP_NAME }}
-          default_fortify_release_name: ${{ github.ref_name }}
-          app_name_postfix: ""
-      # Uncomment below to debug SSC App/App Version names   
-      #- name: Print App and Release Name
-      #  shell: bash
-      #  run: |
-      #    echo "SSC App Name: ${SSC_APP_NAME}"
-      #    echo "SSC App Version Name: ${SSC_APP_VERSION_NAME}"
-      #  env:
-      #    SSC_APP_NAME: ${{ steps.fortify-app-and-rel-name.outputs.app_name }}
-      #    SSC_APP_VERSION_NAME: ${{ steps.fortify-app-and-rel-name.outputs.release_name }}
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
 
       #
       # See: https://github.com/marketplace/actions/fortify-ast-scan
       #
       - name: Run ScanCentral SAST Scan
-        uses: fortify/github-action@v1
+        uses: fortify/github-action@v2
         with:
           sast-scan: true
+          debricked-scan: true
         env:
-          SSC_URL: ${{ vars.FORTIFY_SSC_URL }}
-          SSC_TOKEN: ${{ secrets.FORTIFY_SSC_TOKEN }}
-          SC_SAST_TOKEN: ${{ secrets.FORTIFY_CLIENT_AUTH_TOKEN }}
-          # EXTRA_SC_SAST_LOGIN_OPTS: --socket-timeout=60s
-          SSC_APPVERSION: ${{ format('{0}:{1}', steps.fortify-app-and-rel-name.outputs.app_name, steps.fortify-app-and-rel-name.outputs.release_name) }}
-          # EXTRA_PACKAGE_OPTS: -bf custom-pom.xml
-          SC_SAST_SENSOR_VERSION: ${{ vars.SCANCENTRAL_VERSION }}
+          SSC_URL: ${{ vars.SSC_URL }}
+          SSC_TOKEN: ${{ secrets.SSC_TOKEN }}
+          SC_SAST_TOKEN: ${{ secrets.SC_SAST_TOKEN }}
+          #SSC_APPVERSION: ${{ format('{0}:{1}', steps.fortify-app-and-rel-name.outputs.app_name, steps.fortify-app-and-rel-name.outputs.release_name) }}
+          SC_SAST_SENSOR_VERSION: ${{ vars.SC_SAST_SENSOR_VERSION }}
           DO_SETUP: true
-          DO_DEBRICKED_SCAN: true
           DEBRICKED_TOKEN: ${{ secrets.DEBRICKED_TOKEN }}
           DO_WAIT: true
+          SAST_WAIT_EXTRA_OPTS: --timeout 2h
+          DO_POLICY_CHECK: false  # we will do policy check in a separate job after DAST scan
           DO_JOB_SUMMARY: true
-          #DO_POLICY_CHECK: true
           DO_PR_COMMENT: true
-          #DO_EXPORT: true
-          # TOOL_DEFINITIONS: https://ftfy.mycompany.com/tool-definitions/v1/tool-definitions.yaml.zip
-
-  Deploy-App:
-    runs-on: ubuntu-latest
-    if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.deployApp == 'true') }}
-    needs: [ Quality-Gate ]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Fetch at least the immediate parents so that if this is a pull request then we can checkout the head.
-          fetch-depth: 2
-      - name: Deploy App
-        shell: bash
-        run: |
-          echo "Simulating deployment"
-        env:
-          SSC_APP_NAME: ${{ env.DEFAULT_APP_NAME }}
-      # TBD 
-
-  Functional-Test:
-    runs-on: ubuntu-latest
-    if: ${{ always() }}
-    needs: [ Deploy-App ]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Fetch at least the immediate parents so that if this is a pull request then we can checkout the head.
-          fetch-depth: 2
-    # TBD
+          DO_EXPORT: true
 
   ScanCentral-DAST-Scan:
     runs-on: ubuntu-latest
-    if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runScanCentralDASTScan == 'true') }}
-    needs: [ Deploy-App ]
+    if: ${{ (github.ref_name == github.event.repository.default_branch) && (github.event.inputs.runScanCentralDASTScan == 'true') }}
+    needs: [ Prepare, ScanCentral-SAST-Scan ]
+    env:
+      SSC_APPVERSION: ${{ needs.Prepare.outputs.SSC_APPVERSION }}
+      SSC_PARENT_APPVERSION: ${{ needs.Prepare.outputs.SSC_PARENT_APPVERSION }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Setup Fortify tools
+        uses: fortify/github-action/setup@v2
         with:
-          # Fetch at least the immediate parents so that if this is a pull request then we can checkout the head.
-          fetch-depth: 2
-      - name: Fortify App and Release Name
-        id: fortify-app-and-rel-name
-        uses: fortify-presales/github-actions/fortify-app-and-release-name@main
-        with:
-          default_fortify_app_name: ${{ env.DEFAULT_APP_NAME }}
-          default_fortify_release_name: ${{ github.ref_name }}
-          app_name_postfix: ""
+          export-path: true
+          fcli: latest
       - name: Run ScanCentral DAST Scan
-        id: scancentral-dast-scan
-        uses: fortify-presales/github-actions/sc-dast-scan@main
-        with:
-          ssc_url: ${{ vars.FORTIFY_SSC_URL }}
-          ssc_token: ${{ secrets.FORTIFY_SSC_TOKEN }}
-          scan_settings_id: ${{ vars.FORTIFY_SCDAST_CICD_TOKEN }}
-          do_wait: true
+        shell: bash
+        run: |
+          fcli ssc session login --url $SSC_URL -t $SSC_TOKEN --ssc-session github-actions
+          fcli sc-dast scan start --settings "${SCDAST_SETTINGS_ID}" --store curScan --ssc-session github-actions
+          sleep 10
+          fcli sc-dast scan wait-for ::curScan:: --ssc-session github-actions
+          fcli ssc session logout --ssc-session github-actions
+        env:
+          SSC_URL: ${{ vars.SSC_URL }}
+          SSC_TOKEN: ${{ secrets.SSC_TOKEN }}
+          SSC_APPVERSION: ${{ env.SSC_APPVERSION }}
+          SCDAST_SETTINGS_ID: ${{ vars.SCDAST_SETTINGS_ID }}
   
-  Security-Gate:
+  Verify-Security-Policy:
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [ ScanCentral-SAST-Scan, ScanCentral-DAST-Scan ]
+    needs: [ Prepare, ScanCentral-SAST-Scan ]
+    env:
+      SSC_APPVERSION: ${{ needs.Prepare.outputs.SSC_APPVERSION }}
+      SSC_PARENT_APPVERSION: ${{ needs.Prepare.outputs.SSC_PARENT_APPVERSION }}
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Wait for ScanCentral-DAST-Scan to finish (if it started)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # This script polls the GitHub Actions API to check for the status of the FoD-DAST-Scan job in the current workflow run.
+          # It waits until the job is no longer in progress before allowing the workflow to continue to the policy check step. 
+          # This ensures that the policy check evaluates the results of the DAST scan if it was triggered.
+          set -euo pipefail
+          API="https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs"
+          echo "Looking for job named 'ScanCentral-DAST-Scan' in this workflow run..."
+          # install jq if missing
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -y && sudo apt-get install -y jq
+          fi
+          # poll for the job status (max ~30 minutes)
+          max_attempts=180
+          attempt=0
+          while [ $attempt -lt $max_attempts ]; do
+            attempt=$((attempt+1))
+            job_json=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "$API")
+            job_exists=$(echo "$job_json" | jq '.jobs[]? | select(.name=="ScanCentral-DAST-Scan")' || true)
+            if [ -z "$job_exists" ] || [ "$job_exists" = "null" ]; then
+              echo "No ScanCentral-DAST-Scan job found for this run. Proceeding."
+              break
+            fi
+            status=$(echo "$job_json" | jq -r '.jobs[] | select(.name=="ScanCentral-DAST-Scan") | .status')
+            conclusion=$(echo "$job_json" | jq -r '.jobs[] | select(.name=="ScanCentral-DAST-Scan") | .conclusion')
+            echo "ScanCentral-DAST-Scan status: $status, conclusion: $conclusion"
+            if [ "$status" = "completed" ]; then
+              echo "ScanCentral-DAST-Scan completed (conclusion: $conclusion). Continuing."
+              break
+            fi
+            echo "Waiting for ScanCentrla-DAST-Scan to finish... (attempt $attempt)"
+            sleep 10
+          done
+          if [ $attempt -ge $max_attempts ]; then
+            echo "Timed out waiting for ScanCentral-DAST-Scan; continuing anyway."
+          fi
+      - name: Run Check Policy Action
+        continue-on-error: true # only for reporting, do not fail the job if policy check fails
+        uses: fortify/github-action@v2
         with:
-          # Fetch at least the immediate parents so that if this is a pull request then we can checkout the head.
-          fetch-depth: 2
-      - name: Fortify App and Release Name
-        id: fortify-app-and-rel-name
-        uses: fortify-presales/github-actions/fortify-app-and-release-name@main
-        with:
-          default_fortify_app_name: ${{ env.DEFAULT_APP_NAME }}
-          default_fortify_release_name: ${{ github.ref_name }}
-      - name: Verify SSC Security Policy
-        uses: fortify-presales/github-actions/verify-ssc-security-policy@main
-        with:
-          ssc_url: ${{ vars.FORTIFY_SSC_URL }}
-          ssc_token: ${{ secrets.FORTIFY_SSC_TOKEN }}
-          ssc_app_name: ${{ steps.fortify-app-and-rel-name.outputs.app_name }}
-          ssc_appversion_name: ${{ steps.fortify-app-and-rel-name.outputs.release_name }}
-
-  Release-To-Prod:
-    runs-on: ubuntu-latest
-    if: ${{ always() }}
-    needs: [ Quality-Gate, Security-Gate ]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Fetch at least the immediate parents so that if this is a pull request then we can checkout the head.
-          fetch-depth: 2
-      # TBD
+          sast-scan: false
+          debricked-sca-scan: false
+        env:
+          SSC_URL: ${{ vars.SSC_URL }}
+          SSC_TOKEN: ${{ secrets.SSC_TOKEN }}
+          #SSC_APPVERSION: ${{ format('{0}:{1}', steps.fortify-app-and-rel-name.outputs.app_name, steps.fortify-app-and-rel-name.outputs.release_name) }}
+          DO_SETUP: false
+          DO_WAIT: false
+          DO_POLICY_CHECK: true
+          DO_JOB_SUMMARY: false
+          DO_PR_COMMENT: true
+          DO_EXPORT: true

@@ -50,10 +50,6 @@ on:
         description: 'Carry out SAST scan using Fortify on Demand'
         required: false
         default: 'true'
-      deployApp:
-        description: 'Deploy App'
-        required: false
-        default: 'true'   
       runFoDDASTScan:
         description: 'Carry out DAST scan using Fortify on Demand'
         required: false

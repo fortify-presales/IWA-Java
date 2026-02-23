@@ -12,6 +12,10 @@ on:
         description: 'Set to "true" to run the CodeQL scan (overrides repo variable)'
         required: false
         default: ''
+      codeScanningTool:
+        description: 'Human-facing name of the scanning tool (used as category in uploaded results)'
+        required: false
+        default: 'CodeQL'
 
 permissions:
   security-events: write
@@ -42,5 +46,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew build --no-daemon
 
-      - name: Run CodeQL analysis
+      - name: Run CodeQL analysis and upload results
         uses: github/codeql-action/analyze@v3
+        with:
+          category: ${{ github.event.inputs.codeScanningTool }}
