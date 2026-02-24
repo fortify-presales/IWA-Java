@@ -125,8 +125,9 @@ jobs:
           SSC_URL: ${{ vars.SSC_URL }}
           SSC_TOKEN: ${{ secrets.SSC_TOKEN }}
           SC_SAST_TOKEN: ${{ secrets.SC_SAST_TOKEN }}
+          AVIATOR_URL: ${{ vars.AVIATOR_URL }}
           AVIATOR_TOKEN: ${{ secrets.AVIATOR_TOKEN }}
-          DEBRICKED_TOKEN: ${{ secrets.DEBRICKED_TOKEN }}
+          DEBRICKED_ACCESS_TOKEN: ${{ secrets.DEBRICKED_ACCESS_TOKEN }}
           SC_CLIENT_VERSION: ${{ vars.SC_CLIENT_VERSION }}
           #SSC:APPVERSION and SSC_PARENT_APPVERSION are set in the Prepare job and passed via needs
           SAST_WAIT_EXTRA_OPTS: --timeout 2h # increase default timeout for waiting for SAST scan to finish, as SAST scans can sometimes take a long time
@@ -244,9 +245,6 @@ jobs:
           #SSC:APPVERSION and SSC_PARENT_APPVERSION are set in the Prepare job and passed via needs
           DO_SETUP: false
           DO_SAST_SCAN: false
-          DO_DEBRICKED_SCAN: false
-          DO_AVIATOR_AUDIT: false
-          DO_WAIT: false
           DO_POLICY_CHECK: true
           DO_JOB_SUMMARY: false
           DO_PR_COMMENT: true

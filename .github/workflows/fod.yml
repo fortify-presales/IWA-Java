@@ -247,7 +247,7 @@ jobs:
           DO_SAST_SCAN: false
           DO_SCA_SCAN: false
           DO_AVIATOR_AUDIT: false
-          DO_WAIT: false
+          DO_WAIT: true
           DO_POLICY_CHECK: true
           DO_JOB_SUMMARY: false
           DO_PR_COMMENT: true
