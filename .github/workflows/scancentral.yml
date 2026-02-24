@@ -1,13 +1,12 @@
 # Create GitHub Action Repository Variables for your version of the application:
 # - SSC_URL: URL of your Fortify Software Security Center instance (e.g. https://ssc.example.com)
-# - SCANCENTRAL_VERSION: version of Fortify ScanCentral SAST sensor to use (e.g. 22.1.0)
-# - SSC_APP_NAME_POSTFIX: optional postfix to append to the application name in SSC (e.g. -dev) to allow using different application names for different branches/environments
-# - SSC_APPVERSION: name of the application version in SSC to use for the SAST scan (can be set dynamically in the workflow based on branch or pull request information, see Prepare job below)
-# - SSC_PARENT_APPVERSION: name of the parent application version in SSC to use for the SAST scan (can be set dynamically in the workflow based on branch or pull request information, see Prepare job below)
-# - SC_SAST_SENSOR_VERSION: version of the ScanCentral SAST sensor to use for SAST scan (e.g. 22.1.0)
+# - AVIATOR_URL: URL of your Aviator instance (e.g. https://aviator.example.com)
+# - SC_CLI_VERSION: version of the Fortify Software Security Center CLI to use for running the DAST scan (e.g. 22.1.0)
+# - SSC_APPNAME_POSTFIX: optional postfix to append to the application name in SSC (e.g. -dev) to allow using different application names for different branches/environments
 # - SCDAST_SETTINGS_ID: ID of the ScanCentral DAST settings to use for DAST scan (can be found in the URL when you open the settings in SSC, e.g. if URL is https://ssc.example.com/
 # Create GitHub Action Secrets for your version of the application:
 # - SSC_TOKEN: API token for authenticating to your SSC instance (can be generated in your user profile in SSC)
+# - AVIATOR_TOKEN: API token for authenticating to Aviator (can be generated in your user profile in Aviator)
 # - SC_SAST_TOKEN: API token for authenticating to the ScanCentral SAST sensor (can be generated in your user profile in SSC)
 # - DEBRICKED_TOKEN: API token for authenticating to Debricked (can be generated in your user profile in Debricked
 
@@ -58,7 +57,7 @@ on:
 # Global environment variables
 env:
   DEFAULT_APP_NAME: "IWA-Java"
-  DEFAULT_PARENT_RELEASE_NAME: "main"
+  DEFAULT_PARENT_APPVERSION_NAME: "main"
   GRADLE_VERSION: "7.6.4"
   JAVA_VERSION: "17"
   BASE_DIR: "."
@@ -77,6 +76,7 @@ jobs:
     outputs:
       SSC_APPVERSION: ${{ steps.commands.outputs.SSC_APPVERSION }}
       SSC_PARENT_APPVERSION: ${{ steps.commands.outputs.SSC_PARENT_APPVERSION }}
+      AVIATOR_APP: ${{ steps.commands.outputs.AVIATOR_APP }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,18 +85,24 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "Running in a pull request pipeline ..."
-            echo "SSC_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APP_NAME_POSTFIX }}:merge-to-${{ github.base_ref }}#PR${{ github.event.number }}" >> $GITHUB_OUTPUT
-            echo "SSC_PARENT_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APP_NAME_POSTFIX }}:${{ github.head_ref }}" >> $GITHUB_OUTPUT
+            echo "SSC_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APPNAME_POSTFIX }}:merge-to-${{ github.base_ref }}#PR${{ github.event.number }}" >> $GITHUB_OUTPUT
+            echo "SSC_PARENT_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APPNAME_POSTFIX }}:${{ github.head_ref }}" >> $GITHUB_OUTPUT
+            echo "AVIATOR_APP=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APPNAME_POSTFIX }}" >> $GITHUB_OUTPUT
           else
             echo "Running in a branch pipeline ..."
-            echo "SSC_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APP_NAME_POSTFIX }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
-            echo "SSC_PARENT_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APP_NAME_POSTFIX }}:${{ env.DEFAULT_PARENT_RELEASE_NAME }}" >> $GITHUB_OUTPUT
+            echo "SSC_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APPNAME_POSTFIX }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "SSC_PARENT_APPVERSION=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APPNAME_POSTFIX }}:${{ env.DEFAULT_PARENT_APPVERSION_NAME }}" >> $GITHUB_OUTPUT
+            echo "AVIATOR_APP=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APPNAME_POSTFIX }}" >> $GITHUB_OUTPUT
           fi 
 
   ScanCentral-SAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runScanCentralSASTScan == 'true') }}
     needs: [ Prepare ]
+    env:
+      SSC_APPVERSION: ${{ needs.Prepare.outputs.SSC_APPVERSION }}
+      SSC_PARENT_APPVERSION: ${{ needs.Prepare.outputs.SSC_PARENT_APPVERSION }}
+      AVIATOR_APP: ${{ needs.Prepare.outputs.AVIATOR_APP }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -105,11 +111,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
-
       #
       # See: https://github.com/marketplace/actions/fortify-ast-scan
       #
-      - name: Run ScanCentral SAST Scan
+      - name: Run ScanCentral SAST and SCA Scan
         uses: fortify/github-action@v2
         with:
           sast-scan: true
@@ -118,12 +123,18 @@ jobs:
           SSC_URL: ${{ vars.SSC_URL }}
           SSC_TOKEN: ${{ secrets.SSC_TOKEN }}
           SC_SAST_TOKEN: ${{ secrets.SC_SAST_TOKEN }}
-          #SSC_APPVERSION: ${{ format('{0}:{1}', steps.fortify-app-and-rel-name.outputs.app_name, steps.fortify-app-and-rel-name.outputs.release_name) }}
-          SC_SAST_SENSOR_VERSION: ${{ vars.SC_SAST_SENSOR_VERSION }}
-          DO_SETUP: true
+          AVIATOR_TOKEN: ${{ secrets.AVIATOR_TOKEN }}
           DEBRICKED_TOKEN: ${{ secrets.DEBRICKED_TOKEN }}
+          SC_CLIENT_VERSION: ${{ vars.SC_CLIENT_VERSION }}
+          #SSC:APPVERSION and SSC_PARENT_APPVERSION are set in the Prepare job and passed via needs
+          SAST_WAIT_EXTRA_OPTS: --timeout 2h # increase default timeout for waiting for SAST scan to finish, as SAST scans can sometimes take a long time
+          DO_SETUP: true
+          DO_SAST_SCAN: true
+          DO_DEBRICKED_SCAN: true
+          DO_AVIATOR_AUDIT: true
+          #AVIATOR_APP is set in the Prepare job and passed via needs
           DO_WAIT: true
-          SAST_WAIT_EXTRA_OPTS: --timeout 2h
+          DO_APPVERSION_SUMMARY: true
           DO_POLICY_CHECK: false  # we will do policy check in a separate job after DAST scan
           DO_JOB_SUMMARY: true
           DO_PR_COMMENT: true
@@ -155,7 +166,7 @@ jobs:
         env:
           SSC_URL: ${{ vars.SSC_URL }}
           SSC_TOKEN: ${{ secrets.SSC_TOKEN }}
-          SSC_APPVERSION: ${{ env.SSC_APPVERSION }}
+          #SSC:APPVERSION and SSC_PARENT_APPVERSION are set in the Prepare job and passed via needs
           SCDAST_SETTINGS_ID: ${{ vars.SCDAST_SETTINGS_ID }}
   
   Verify-Security-Policy:
@@ -216,7 +227,7 @@ jobs:
         env:
           SSC_URL: ${{ vars.SSC_URL }}
           SSC_TOKEN: ${{ secrets.SSC_TOKEN }}
-          #SSC_APPVERSION: ${{ format('{0}:{1}', steps.fortify-app-and-rel-name.outputs.app_name, steps.fortify-app-and-rel-name.outputs.release_name) }}
+          #SSC:APPVERSION and SSC_PARENT_APPVERSION are set in the Prepare job and passed via needs
           DO_SETUP: false
           DO_WAIT: false
           DO_POLICY_CHECK: true
