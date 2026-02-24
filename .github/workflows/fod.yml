@@ -14,9 +14,10 @@
 #   "Automated Audit preference" should be configured for the release's Static Scan Settings.
 name: OpenText Core Application Security Scan
 
-# Set default permissions for the GITHUB_TOKEN
+# Set the permissions for the GITHUB_TOKEN to allow the workflow to read repository contents, write security events, and write pull request comments. This is necessary for the workflow to function properly, as it needs to access the codebase for scanning, report security findings, and comment on pull requests with the results.
 permissions:
   contents: read
+  security-events: write
   pull-requests: write
 
 on:
@@ -117,23 +118,23 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
       #
-      # See: https://github.com/marketplace/actions/fortify-ast-scan
+      # See: https://fortify.github.io/fcli/v3/ci/github/v3.0.x/ast-action-fod.html
       #
       - name: Run FoD SAST and SCA Scan
         timeout-minutes: 360
-        uses: fortify/github-action@v2
-        with:
-          sast-scan: true
-          debricked-sca-scan: true
+        uses: fortify/github-action@v3
         env:
           FOD_URL: ${{ vars.FOD_URL }}
           FOD_CLIENT_ID: ${{secrets.FOD_CLIENT_ID}}
           FOD_CLIENT_SECRET: ${{secrets.FOD_CLIENT_SECRET}}
           #FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
-          DO_SETUP: true
           SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}" --sdlc-status Development --app-owner {1} --assessment-type "{2}"', env.FOD_PARENT_RELEASE, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
           PACKAGE_EXTRA_OPTS: -bt gradle -bf build.gradle -bc "clean build -x test" -oss
           # FOD_SAST_SCAN_EXTRA_OPTS:
+          DO_SETUP: true
+          DO_SAST_SCAN: true
+          DO_AVIATOR_AUDIT: true
+          DO_SCA_SCAN: true
           DO_WAIT: true
           SAST_WAIT_EXTRA_OPTS: --timeout 2h
           DO_POLICY_CHECK: false  # we will do policy check in a separate job after DAST scan
@@ -161,7 +162,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Fortify tools
-        uses: fortify/github-action/setup@v2
+        uses: fortify/github-action/setup@v3
         with:
           export-path: true
           fcli: latest
@@ -237,15 +238,15 @@ jobs:
           fi
       - name: Run Check Policy Action
         continue-on-error: true # only for reporting, do not fail the job if policy check fails
-        uses: fortify/github-action@v2
-        with:
-          sast-scan: false
-          debricked-sca-scan: false
+        uses: fortify/github-action@v3
         env:
           FOD_URL: ${{ vars.FOD_URL }}
           FOD_CLIENT_ID: ${{secrets.FOD_CLIENT_ID}}
           FOD_CLIENT_SECRET: ${{secrets.FOD_CLIENT_SECRET}}
           DO_SETUP: false
+          DO_SAST_SCAN: false
+          DO_SCA_SCAN: false
+          DO_AVIATOR_AUDIT: false
           DO_WAIT: false
           DO_POLICY_CHECK: true
           DO_JOB_SUMMARY: false

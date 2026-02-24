@@ -9,13 +9,12 @@
 # - AVIATOR_TOKEN: API token for authenticating to Aviator (can be generated in your user profile in Aviator)
 # - SC_SAST_TOKEN: API token for authenticating to the ScanCentral SAST sensor (can be generated in your user profile in SSC)
 # - DEBRICKED_TOKEN: API token for authenticating to Debricked (can be generated in your user profile in Debricked
-
-
 name: OpenText ScanCentral SAST and DAST Scan
 
-# Set default permissions for the GITHUB_TOKEN
+# Set the permissions for the GITHUB_TOKEN to allow the workflow to read repository contents, write security events, and write pull request comments. This is necessary for the workflow to function properly, as it needs to access the codebase for scanning, report security findings, and comment on pull requests with the results.
 permissions:
   contents: read
+  security-events: write
   pull-requests: write
 
 on:
@@ -65,12 +64,11 @@ env:
 jobs:
 
   #
-  # The Prepare job is responsible for setting up the environment variables that will be used in the subsequent jobs.
-  # It checks whether the workflow is running in the context of a pull request or a branch push and sets the SSC_APPVERSION
-  # and SSC_PARENT_APPVERSION variables accordingly. For pull requests, it constructs the release name to indicate that
-  # it's a merge to the base branch, while for branch pushes, it uses the branch name directly. This setup allows the
-  # SAST and DAST scan jobs to reference the correct release information when they run.
-  #
+  # The Prepare job is responsible for setting up the environment variables that will be used in the subsequent scan jobs.
+  # It checks whether the workflow was triggered by a push to a branch or a pull request, and sets the SSC_APPVERSION and
+  # SSC_PARENT_APPVERSION variables accordingly. For pull requests, it uses the source and target branches to create unique
+  # application version names in SSC, while for branch pipelines it uses the branch name and a default parent version.
+  # This allows for better organization of scan results in SSC based on the context of the scan (PR vs branch).
   Prepare:
     runs-on: ubuntu-latest
     outputs:
@@ -95,6 +93,13 @@ jobs:
             echo "AVIATOR_APP=${{ env.DEFAULT_APP_NAME }}${{ vars.SSC_APPNAME_POSTFIX }}" >> $GITHUB_OUTPUT
           fi 
 
+  #
+  # The ScanCentral-SAST-Scan job runs the ScanCentral SAST and SCA scan using the fortify/github-action@v3 action.
+  # It is triggered for both push and pull request events (as well as manually via workflow_dispatch) if the corresponding
+  # input is set to true. It uses the environment variables set in the Prepare job to determine the application version
+  # names in SSC, and it also passes the necessary tokens for authentication to SSC, Aviator, and Debricked. The scan is
+  # configured to wait for completion, generate a summary, post a PR comment with the results, and export the results
+  # for use in subsequent jobs.
   ScanCentral-SAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.event_name == 'push') || (github.event_name == 'pull_request') || (github.event.inputs.runScanCentralSASTScan == 'true') }}
@@ -112,13 +117,10 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
       #
-      # See: https://github.com/marketplace/actions/fortify-ast-scan
+      # See: https://fortify.github.io/fcli/v3/ci/github/v3.0.x/ast-action-ssc.html
       #
-      - name: Run ScanCentral SAST and SCA Scan
-        uses: fortify/github-action@v2
-        with:
-          sast-scan: true
-          debricked-scan: true
+      - name: Run ScanCentral SAST and Debricked Scan
+        uses: fortify/github-action@v3
         env:
           SSC_URL: ${{ vars.SSC_URL }}
           SSC_TOKEN: ${{ secrets.SSC_TOKEN }}
@@ -140,6 +142,12 @@ jobs:
           DO_PR_COMMENT: true
           DO_EXPORT: true
 
+  #
+  # The ScanCentral-DAST-Scan job runs the ScanCentral DAST scan using the fcli command line tool. It is only triggered
+  # if the workflow was triggered by a push to the default branch and the corresponding input is set to true. It uses the
+  # environment variables set in the Prepare job to determine the application version names in SSC, and it also passes
+  # the necessary tokens for authentication to SSC. The scan is configured to wait for completion before allowing the
+  # workflow to proceed to the policy check step.
   ScanCentral-DAST-Scan:
     runs-on: ubuntu-latest
     if: ${{ (github.ref_name == github.event.repository.default_branch) && (github.event.inputs.runScanCentralDASTScan == 'true') }}
@@ -151,7 +159,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Fortify tools
-        uses: fortify/github-action/setup@v2
+        uses: fortify/github-action/setup@v3
         with:
           export-path: true
           fcli: latest
@@ -168,7 +176,16 @@ jobs:
           SSC_TOKEN: ${{ secrets.SSC_TOKEN }}
           #SSC:APPVERSION and SSC_PARENT_APPVERSION are set in the Prepare job and passed via needs
           SCDAST_SETTINGS_ID: ${{ vars.SCDAST_SETTINGS_ID }}
-  
+
+  #
+  # The Verify-Security-Policy job runs the policy check using the fortify/github-action@v3 action. It is triggered for
+  # both push and pull request events (as well as manually via workflow_dispatch) if the corresponding input is set to
+  # true, but it only runs after the ScanCentral-SAST-Scan job has completed (regardless of success or failure) to ensure
+  # that the policy check evaluates the results of the SAST scan and DAST scan (if it was triggered). It uses the
+  # environment variables set in the Prepare job to determine the application version names in SSC, and it also passes
+  # the necessary token for authentication to SSC. The policy check is configured to not fail the job if the policy check
+  # fails, as this allows for reporting of policy violations without necessarily blocking the workflow (e.g. in a PR
+  # pipeline you may want to report policy violations but still allow merging if there are other mitigating factors).
   Verify-Security-Policy:
     runs-on: ubuntu-latest
     if: ${{ always() }}
@@ -220,15 +237,15 @@ jobs:
           fi
       - name: Run Check Policy Action
         continue-on-error: true # only for reporting, do not fail the job if policy check fails
-        uses: fortify/github-action@v2
-        with:
-          sast-scan: false
-          debricked-sca-scan: false
+        uses: fortify/github-action@v3
         env:
           SSC_URL: ${{ vars.SSC_URL }}
           SSC_TOKEN: ${{ secrets.SSC_TOKEN }}
           #SSC:APPVERSION and SSC_PARENT_APPVERSION are set in the Prepare job and passed via needs
           DO_SETUP: false
+          DO_SAST_SCAN: false
+          DO_DEBRICKED_SCAN: false
+          DO_AVIATOR_AUDIT: false
           DO_WAIT: false
           DO_POLICY_CHECK: true
           DO_JOB_SUMMARY: false
