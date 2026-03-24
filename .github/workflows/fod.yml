@@ -113,7 +113,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       # Setup JDK 17 on host
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
@@ -137,7 +137,7 @@ jobs:
           DO_AVIATOR_AUDIT: true
           DO_SCA_SCAN: true
           DO_WAIT: true
-          SAST_WAIT_EXTRA_OPTS: --timeout 2h
+          SAST_WAIT_EXTRA_OPTS: --timeout 3h
           DO_POLICY_CHECK: false  # we will do policy check in a separate job after DAST scan
           DO_JOB_SUMMARY: true
           DO_PR_COMMENT: true
