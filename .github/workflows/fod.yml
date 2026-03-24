@@ -80,7 +80,7 @@ jobs:
       FOD_PARENT_RELEASE: ${{ steps.commands.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up environment variables
         id: commands
         run: |
@@ -111,7 +111,7 @@ jobs:
       FOD_PARENT_RELEASE: ${{ needs.Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       # Setup JDK 17 on host
       - uses: actions/setup-java@v4
         with:
@@ -128,9 +128,10 @@ jobs:
           FOD_CLIENT_ID: ${{secrets.FOD_CLIENT_ID}}
           FOD_CLIENT_SECRET: ${{secrets.FOD_CLIENT_SECRET}}
           #FOD_RELEASE: ${{ format('{0}{1}:{2}', env.DEFAULT_APP_NAME, vars.FORTIFY_APP_NAME_POSTFIX, github.ref_name) }}
-          SETUP_EXTRA_OPTS: ${{ format('--copy-from "{0}" --sdlc-status Development --app-owner {1} --assessment-type "{2}"', env.FOD_PARENT_RELEASE, vars.FOD_DEFAULT_OWNER, vars.FOD_DEFAULT_ASSESSMENT_TYPE) }}
+          SETUP_EXTRA_OPTS: ${{ format('--sdlc-status Development --app-owner {0}', vars.FOD_DEFAULT_OWNER) }}
           PACKAGE_EXTRA_OPTS: -bt gradle -bf build.gradle -bc "clean build -x test" -oss
-          # FOD_SAST_SCAN_EXTRA_OPTS:
+          COPY_FROM_RELEASE: ${{ env.FOD_PARENT_RELEASE }}
+          SAST_ASSESSMENT_TYPE: ${{ vars.FOD_DEFAULT_ASSESSMENT_TYPE }}
           DO_SETUP: true
           DO_SAST_SCAN: true
           DO_AVIATOR_AUDIT: true
@@ -160,7 +161,7 @@ jobs:
       FOD_PARENT_RELEASE: ${{ needs.Prepare.outputs.FOD_PARENT_RELEASE }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Fortify tools
         uses: fortify/github-action/setup@v3
         with:
@@ -197,7 +198,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Wait for FoD-DAST-Scan to finish (if it started)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -16,6 +16,9 @@
 /installs/
 /fortify-sca.settings
 .venv
+**/*.cpython-*
+**/*.pyo
+**/*.pyd
 
 # Ignore Gradle project-specific cache directory
 .gradle
@@ -36,3 +39,5 @@ sc.gradle.debricked.lock
 debricked.fingerprints.txt
 fcli.env
 /tools/ps_syntax_check.ps1
+aviator_token.txt
+UserRepositoryImpl_insecure_examples.txt

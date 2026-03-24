@@ -3,10 +3,11 @@
 [![OpenText FoD](https://github.com/fortify-presales/IWA-Java/actions/workflows/fod.yml/badge.svg)](https://github.com/fortify-presales/IWA-Java/actions/workflows/fod.yml)
 [![OpenText ScanCentral](https://github.com/fortify-presales/IWA-Java/actions/workflows/scancentral.yml/badge.svg)](https://github.com/fortify-presales/IWA-Java/actions/workflows/scancentral.yml)
 
-# IWA (Insecure Web App) Pharmacy Direct
+# IWA (Insecure Web App) Pharmacy Direct — Java Edition
 
 #### Table of Contents
 
+*   [Notice](#notice)
 *   [Overview](#overview)
 *   [Forking the Repository](#forking-the-repository)
 *   [Building the Application](#building-the-application)
@@ -18,10 +19,12 @@
     * [DAST using Fortify WebInspect](#dast-using-fortify-webinspect)
     * [DAST using Fortify ScanCentral DAST](#dast-using-fortify-scancentral-dast)
     * [DAST using Fortify on Demand](#dast-using-fortify-on-demand)
+    * [DAST using Fortify Connect](#dast-using-fortify-connect)
     * [API Security Testing using Fortify WebInspect and Postman](#api-security-testing-using-fortify-webinspect-and-postman)
-    * [API Security Testing using ScanCentral DAST](#api-security-testing-using-scancentral-dast-and-postman)
+    * [API Security Testing using ScanCentral DAST and Postman](#api-security-testing-using-scancentral-dast-and-postman)
     * [API Security Testing using Fortify on Demand](#api-security-testing-using-fortify-on-demand)
     * [FAST Using ScanCentral DAST and FAST proxy](#fast-using-scancentral-dast-and-fast-proxy)
+*   [Key behaviour and precedence](#key-behaviour-and-precedence)
 *   [Build and Pipeline Integrations](#build-and-pipeline-integrations)
     * [Jenkins Pipeline](#jenkins-pipeline)
     * [GitHub Actions](#github-actions)
@@ -101,14 +104,8 @@ docker build -t iwa -f Dockerfile .
 
 This image can then be executed using the following commands:
 
-```PowerShell
-docker run -d -p 8888:8888 \
-  -e SPRING_MAIL_HOST=smtp.example.com \
-  -e SPRING_MAIL_PORT=587 \
-  -e SPRING_MAIL_USERNAME=youruser \
-  -e SPRING_MAIL_PASSWORD=yourpassword \
-  -e SPRING_MAIL_TEST_CONNECTION=true \
-  iwa
+```bash
+docker run -d -p 8888:8888 -e SPRING_MAIL_HOST=smtp.example.com -e SPRING_MAIL_PORT=587 -e SPRING_MAIL_USERNAME=youruser -e SPRING_MAIL_PASSWORD=yourpassword -e SPRING_MAIL_TEST_CONNECTION=true iwa
 ```
 
 #### Dockerfile notes
@@ -162,18 +159,10 @@ Example: run the application with smtp4dev (host.docker.internal lets the contai
 ```
 docker build -t iwa -f Dockerfile .
 
-docker run --rm -p 8888:8888 \
-  -e SPRING_MAIL_HOST=host.docker.internal \
-  -e SPRING_MAIL_PORT=2525 \
-  -e SPRING_MAIL_TEST_CONNECTION=true \
-  iwa
+docker run --rm -p 8888:8888 -e SPRING_MAIL_HOST=host.docker.internal -e SPRING_MAIL_PORT=2525 -e SPRING_MAIL_TEST_CONNECTION=true iwa
 ```
 
-If you don't want the container to wait for mail at startup (for example in environments where mail is optional) set:
-
-```
--e SPRING_MAIL_TEST_CONNECTION=false
-```
+If you don't want the container to wait for mail at startup (for example in environments where mail is optional) add the environment setting `-e SPRING_MAIL_TEST_CONNECTION=false` to your `docker run` command.
 
 ## Deploying the Application
 
@@ -432,6 +421,52 @@ fcli fod dast-scan wait-for ::curScan::
 ```
 
 TBD: how to upload login macros and/or workflows.
+
+### DAST using Fortify Connect
+
+If you want to run a DAST scan that targets the web app running on your development machine you can use the included 
+Fortify Connect container to proxy/forward scans from Fortify on Demand (FoD) to the local web app.
+
+Basic steps
+
+1. Start the web application locally (from the repository root):
+
+```powershell
+# From PowerShell or a POSIX shell in the repo root
+./gradlew bootRun
+```
+
+The application will be available on http://localhost:8888 by default.
+
+2. Start the Fortify Connect container using the provided helper script. Example (provide your FoD Connect credentials via parameters or environment variables):
+
+```powershell
+# Example: start the Fortify Connect container and provide FoD credentials
+./fortify-connect.ps1 -Start -FdcAddress emea.fodconnect.com:443 -FdcUsername 'fod-connect-username' -FdcPassword 'fod-connect-password'
+
+# Or, set environment variables and run without parameters:
+# $env:FDC_ADDRESS = 'emea.fodconnect.com:443'
+# $env:FDC_UNAME = 'fod-connect-username'
+# $env:FDC_UPSWD = 'fod-connect-password'
+# ./fortify-connect.ps1 -Start
+```
+
+3. When configuring a Fortify on Demand DAST (or DAST Automated) scan that will run via the Fortify Connect container, point the scan at the host using the special Docker host DNS name so the container can reach your locally-running web app:
+
+```
+http://host.docker.internal:8888
+```
+
+Notes and troubleshooting
+
+- `host.docker.internal` is supported on Docker Desktop (Windows / macOS) and allows containers to reach services running on the host. If your Docker environment does not expose this name, you will need to use an alternative networking approach (for example running the scan from the host network, or using a routed network address).
+- Ensure the Fortify Connect container and any scanning components can access the host network and that firewalls do not block the port (default: 8888).
+- If you want to stop and remove the Fortify Connect container later, run:
+
+```powershell
+./fortify-connect.ps1 -Stop
+```
+
 
 ### API Security Testing using Fortify WebInspect and Postman
 

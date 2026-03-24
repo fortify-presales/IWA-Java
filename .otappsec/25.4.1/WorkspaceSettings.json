@@ -1,0 +1,22 @@
+{
+  "fodWorkspace": {
+    "type": "FoD",
+    "selectedApp": {
+      "Id": "41338",
+      "Name": "IWA-Java [KAL]"
+    },
+    "selectedRelease": {
+      "Id": "182088",
+      "Name": "klee2_dev"
+    },
+    "selectedAppType": "applist-all",
+    "selectedScanType": "fod-static-oss"
+  },
+  "sscWorkspaces": [
+    {
+      "name": "IWA-Java_c:\\users\\klee2\\repos\\iwa-java",
+      "type": "SSC"
+    }
+  ],
+  "ScanCentralPackageOption": {}
+}

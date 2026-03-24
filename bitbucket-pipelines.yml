@@ -1,0 +1,125 @@
+# Bitbucket Pipelines configuration for this Gradle/Java project using JDK 17
+# - Uses a Gradle image that includes OpenJDK 17
+# - Runs the project's Gradle wrapper (./gradlew)
+# - Caches Gradle dependencies (~/.gradle)
+# - Publishes build artifacts from build/libs/**
+# - Runs a SAST scan using the Fortify on Demand CLI (fcli) and "fcli action run ci" action (requires repo variables)
+# - Optional Docker build & push step on the main branch (requires repo variables)
+#
+# The following environment variables should be set in the Bitbucket repository settings for the Docker build/push step to work:
+# - DOCKER_REGISTRY: The URL of your Docker registry (e.g., docker.io for Docker Hub)
+# - DOCKER_REPO: The name of your Docker repository (e.g., myusername/myapp)
+# - DOCKER_USERNAME: Your Docker registry username
+# - DOCKER_PASSWORD: Your Docker registry password (mark this as secured)
+#
+# The following environment variables should be set for the SAST scan step to work:
+# - FOD_URL: The URL of your Fortify on Demand instance (e.g., https://fod.example.com)
+# - FOD_CLIENT_ID: The client ID for API access to Fortify on Demand
+# - FOD_CLIENT_SECRET: The client secret for API access to Fortify on Demand (mark this as secured)
+# The following optional environment variables can be set to customize the SAST scan behavior:
+# - FOD_RELEASE: The name of the release in Fortify on Demand to which the scan results should be published, defaults to the Bitbucket org/repo:branch.
+
+image: atlassian/default-image:5
+
+options:
+  # minutes; increase if your builds take longer than the default 60 minutes
+  max-time: 240
+  # optional: speed up by enabling docker layer caching on Premium plans
+  docker: true
+
+definitions:
+  steps:
+    - &build-and-test
+      step:
+        name: Build and Test
+        image: gradle:8.3-jdk17
+        caches:
+          - gradle
+        script:
+          - chmod +x ./gradlew || true
+          - ./gradlew --no-daemon clean test
+        artifacts:
+          - build/libs/**
+
+    - &docker-build-and-push
+      step:
+        name: Build & Push Docker image
+        image: docker:20.10.16
+        services:
+          - docker
+        deployment: production
+        script:
+          - echo "Docker build & push step"
+          # If the required repo variables are not set, skip the Docker step
+          - >
+            if [ -z "${DOCKER_REGISTRY}" ] || [ -z "${DOCKER_REPO}" ] || [ -z "${DOCKER_USERNAME}" ] || [ -z "${DOCKER_PASSWORD}" ]; then
+              echo "Docker publish variables not set, skipping Docker build/push";
+              exit 0;
+            fi
+          - export IMAGE_TAG=${DOCKER_TAG:-$BITBUCKET_COMMIT}
+          - export IMAGE_FQN="${DOCKER_REGISTRY}/${DOCKER_REPO}:${IMAGE_TAG}"
+          - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin "$DOCKER_REGISTRY"
+          - docker build -t "$IMAGE_FQN" .
+          - docker push "$IMAGE_FQN"
+
+    - &fortify-scan
+      step:
+        name: SAST scan (fcli)
+        # It is preferred to use a custom image with your build tools and fcli pre-installed, but for demonstration 
+        # purposes we will download and run the fcli binary directly in the pipeline
+        image: gradle:8.3-jdk17
+        caches:
+          - gradle
+        script:
+          # Ensure default values for non-secret step variables so they're available inside the container
+          - |
+            export DO_AVIATOR_AUDIT="${DO_AVIATOR_AUDIT:-true}"
+            export DO_SCA_SCAN="${DO_SCA_SCAN:-true}"
+            export DO_SAST_EXPORT="${DO_SAST_EXPORT:-true}"
+            export SAST_EXPORT_EXTRA_OPTS="${SAST_EXPORT_EXTRA_OPTS:---report-file bb-fortify-report.json --annotations-file bb-fortify-annotations.json}"
+            #export SAST_EXPORT_EXTRA_OPTS="${SAST_EXPORT_EXTRA_OPTS:---publish}"
+            export SAST_WAIT_EXTRA_OPTS="${SAST_WAIT_EXTRA_OPTS:---timeout 4h}"
+            if [ -z "${FOD_URL}" ] || [ -z "${FOD_CLIENT_ID}" ] || [ -z "${FOD_CLIENT_SECRET}" ]; then
+              echo "Required FOD_* variables (FOD_URL, FOD_CLIENT_ID, FOD_CLIENT_SECRET) are not set.\n"
+              echo "Please set them in Repository settings -> Pipelines -> Repository variables (mark secrets as secured)."
+              exit 1
+            fi
+            # Download and extract the fcli binary (as requested)
+            curl -L https://github.com/fortify/fcli/releases/latest/download/fcli-linux.tgz | tar -xz fcli
+            chmod +x fcli
+            ./fcli action run ci
+            if [ -r bb-fortify-report.json ]; then
+              curl --proxy 'http://localhost:29418' --request PUT http://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_OWNER/$BITBUCKET_REPO_SLUG/commit/$BITBUCKET_COMMIT/reports/test-001 --header 'Content-Type: application/json' -d @bb-fortify-report.json || exit 1
+              if [ -r bb-fortify-annotations.json ]; then
+                curl --proxy 'http://localhost:29418' --request POST http://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_OWNER/$BITBUCKET_REPO_SLUG/commit/$BITBUCKET_COMMIT/reports/test-001/annotations --header 'Content-Type: application/json' -d @bb-fortify-annotations.json || exit 1
+              fi
+            fi
+        artifacts:
+          - bb-fortify-annotations.json
+          - bb-fortify-report.json
+
+  caches:
+    # Cache Gradle home to speed up dependency resolution between builds
+    gradle: ~/.gradle
+
+pipelines:
+
+  pull-requests:
+    '**':
+      - *build-and-test
+      - *fortify-scan
+      #- *docker-build-and-push
+
+  branches:
+    bitbucket-demo:
+      # Commented out build-and-test step to speed up the demo, but you can uncomment it if you want to run the build before the SAST scan
+      #- *build-and-test
+      - *fortify-scan
+    bitbucket-demo-branch:
+      # Commented out build-and-test step to speed up the demo, but you can uncomment it if you want to run the build before the SAST scan
+      #- *build-and-test
+      - *fortify-scan
+
+    main:
+      - *build-and-test
+      #- *docker-build-and-push
